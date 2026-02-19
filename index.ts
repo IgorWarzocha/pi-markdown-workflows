@@ -3,7 +3,17 @@ import os from "node:os";
 import path from "node:path";
 
 import { DynamicBorder, type Theme } from "@mariozechner/pi-coding-agent";
-import { Container, Input, SelectList, Spacer, Text, type SelectItem } from "@mariozechner/pi-tui";
+import {
+  Container,
+  Input,
+  Key,
+  SelectList,
+  Spacer,
+  Text,
+  getEditorKeybindings,
+  matchesKey,
+  type SelectItem,
+} from "@mariozechner/pi-tui";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
@@ -208,6 +218,10 @@ class WorkflowMenuComponent extends Container {
   private mode: "workflows" | "actions";
   private current: WorkflowDefinition | null;
   private done: (value: WorkflowPick) => void;
+  private searchActive: boolean;
+  private leaderActive: boolean;
+  private leaderTimer: ReturnType<typeof setTimeout> | null;
+  private selected: string;
 
   constructor(
     tui: { requestRender: () => void },
@@ -222,6 +236,10 @@ class WorkflowMenuComponent extends Container {
     this.mode = "workflows";
     this.current = null;
     this.done = done;
+    this.searchActive = false;
+    this.leaderActive = false;
+    this.leaderTimer = null;
+    this.selected = "__create__";
     this.header = new Text("", 1, 0);
     this.hint = new Text("", 1, 0);
     this.list = new Container();
@@ -249,20 +267,58 @@ class WorkflowMenuComponent extends Container {
     this.redraw();
   }
 
+  private clearLeader(): void {
+    if (this.leaderTimer) clearTimeout(this.leaderTimer);
+    this.leaderTimer = null;
+    this.leaderActive = false;
+    this.redraw();
+  }
+
+  private startLeader(): void {
+    if (this.leaderActive) {
+      this.clearLeader();
+      return;
+    }
+    this.leaderActive = true;
+    if (this.leaderTimer) clearTimeout(this.leaderTimer);
+    this.leaderTimer = setTimeout(() => this.clearLeader(), 2000);
+    this.redraw();
+  }
+
+  private startSearch(): void {
+    if (this.mode !== "workflows") return;
+    this.searchActive = true;
+    this.search.focused = true;
+    this.redraw();
+  }
+
   private redraw(): void {
-    this.header.setText(
+    const title =
       this.mode === "workflows"
         ? this.theme.fg("accent", this.theme.bold(`Workflows (${this.workflows.length})`))
-        : this.theme.fg("accent", this.theme.bold(`Actions for \"${this.current?.name ?? ""}\"`)),
-    );
-    this.hint.setText(
-      this.mode === "workflows"
-        ? this.theme.fg(
-            "dim",
-            "Press / to search • ↑↓ or j/k select • Enter view • Esc close",
-          )
-        : this.theme.fg("dim", "Enter confirm • Esc back • ↑↓ or j/k navigate"),
-    );
+        : this.theme.fg("accent", this.theme.bold(`Actions for \"${this.current?.name ?? ""}\"`));
+    this.header.setText(title);
+    if (this.leaderActive) {
+      this.hint.setText(
+        this.theme.fg(
+          "warning",
+          this.mode === "workflows"
+            ? "More options: c create • w open actions"
+            : "More options: u use • r refine • a append • p promote • d delete",
+        ),
+      );
+    }
+    if (!this.leaderActive) {
+      this.hint.setText(
+        this.mode === "workflows"
+          ? this.theme.fg(
+              "dim",
+              "Press / to search • ↑↓ or j/k select • Enter view • Ctrl+X more options • Esc close",
+            )
+          : this.theme.fg("dim", "Enter confirm • Esc back • ↑↓ or j/k navigate • Ctrl+X more options"),
+      );
+    }
+    this.search.focused = this.searchActive;
     const items: SelectItem[] =
       this.mode === "workflows"
         ? [
@@ -300,14 +356,42 @@ class WorkflowMenuComponent extends Container {
       scrollInfo: (text) => this.theme.fg("dim", text),
       noMatch: (text) => this.theme.fg("warning", text),
     });
+    this.select.onSelectionChange = (item) => {
+      this.selected = item.value;
+    };
     this.select.onSelect = (item) => this.confirm(item.value);
     this.select.onCancel = () => this.cancel();
+    if (this.mode === "workflows") this.select.setFilter(this.search.getValue());
     this.list.clear();
     this.list.addChild(this.select);
     for (let index = items.length; index < 9; index += 1) {
       this.list.addChild(new Text("⠀", 0, 0));
     }
     this.tui.requestRender();
+  }
+
+  private leaderRun(data: string): boolean {
+    if (this.mode === "workflows") {
+      if (data === "c" || data === "C") {
+        this.done({ type: "create" });
+        this.clearLeader();
+        return true;
+      }
+      if (data === "w" || data === "W") {
+        this.confirm(this.selected);
+        this.clearLeader();
+        return true;
+      }
+      this.clearLeader();
+      return false;
+    }
+    if (data === "u" || data === "U") return this.confirm("use"), this.clearLeader(), true;
+    if (data === "r" || data === "R") return this.confirm("refine"), this.clearLeader(), true;
+    if (data === "a" || data === "A") return this.confirm("append-to-agents"), this.clearLeader(), true;
+    if (data === "p" || data === "P") return this.confirm("promote-to-skill"), this.clearLeader(), true;
+    if (data === "d" || data === "D") return this.confirm("delete"), this.clearLeader(), true;
+    this.clearLeader();
+    return false;
   }
 
   private confirm(value: string): void {
@@ -323,6 +407,8 @@ class WorkflowMenuComponent extends Container {
       }
       this.current = workflow;
       this.mode = "actions";
+      this.searchActive = false;
+      this.search.focused = false;
       this.redraw();
       return;
     }
@@ -351,6 +437,13 @@ class WorkflowMenuComponent extends Container {
   }
 
   private cancel(): void {
+    if (this.searchActive) {
+      this.searchActive = false;
+      this.search.focused = false;
+      this.search.setValue("");
+      this.redraw();
+      return;
+    }
     if (this.mode === "actions") {
       this.mode = "workflows";
       this.current = null;
@@ -361,6 +454,37 @@ class WorkflowMenuComponent extends Container {
   }
 
   handleInput(data: string): void {
+    if (this.searchActive) {
+      const key = getEditorKeybindings();
+      if (key.matches(data, "selectConfirm")) {
+        this.searchActive = false;
+        this.search.focused = false;
+        this.redraw();
+        return;
+      }
+      if (key.matches(data, "selectCancel")) {
+        this.searchActive = false;
+        this.search.focused = false;
+        this.search.setValue("");
+        this.redraw();
+        return;
+      }
+      if (key.matches(data, "selectUp") || key.matches(data, "selectDown")) return;
+      this.search.handleInput(data);
+      this.redraw();
+      return;
+    }
+    if (data === "\u0018" || matchesKey(data, Key.ctrl("x"))) {
+      this.startLeader();
+      return;
+    }
+    if (this.leaderActive) {
+      if (this.leaderRun(data)) return;
+    }
+    if (data === "/") {
+      this.startSearch();
+      return;
+    }
     if (data === "j") {
       this.select.handleInput("\u001b[B");
       return;

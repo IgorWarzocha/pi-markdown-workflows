@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 import { DynamicBorder, type Theme } from "@mariozechner/pi-coding-agent";
+import { WorkflowActionPanel, WorkflowDetailPanel } from "./src/ui/workflow-panels.js";
 import {
   Container,
   Input,
@@ -232,18 +234,57 @@ type WorkflowPick =
   | { type: "create" }
   | { type: "action"; action: WorkflowAction; workflow: WorkflowDefinition };
 
+function workflowRefs(cwd: string, workflow: WorkflowDefinition): string[] {
+  let filesRaw = "";
+  try {
+    filesRaw = execFileSync("rg", ["--files", "-g", "**/AGENTS.md"], {
+      cwd,
+      encoding: "utf-8",
+    });
+  } catch {
+    return [];
+  }
+  const files = filesRaw
+    .split("\n")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => path.join(cwd, value));
+  const rel = path.relative(cwd, workflow.location).replaceAll("\\", "/");
+  const tokens = [workflow.location, rel, `./${rel}`];
+  const out: string[] = [];
+  for (const file of files) {
+    let content = "";
+    try {
+      content = fs.readFileSync(file, "utf-8");
+    } catch {
+      continue;
+    }
+    const hasName = content.includes(workflow.name);
+    const hasPath = tokens.some((token) => content.includes(token));
+    if (!hasName || !hasPath) continue;
+    out.push(path.relative(cwd, file).replaceAll("\\", "/"));
+  }
+  return out;
+}
+
 class WorkflowMenuComponent extends Container {
   private tui: { requestRender: () => void };
   private theme: Theme;
   private workflows: WorkflowDefinition[];
   private header: Text;
   private hint: Text;
+  private hintWrap: Container;
   private list: Container;
+  private searchWrap: Container;
   private search: Input;
   private select: SelectList;
   private mode: "workflows" | "actions";
   private current: WorkflowDefinition | null;
+  private action: WorkflowActionPanel | null;
+  private detail: WorkflowDetailPanel | null;
+  private preview: boolean;
   private done: (value: WorkflowPick) => void;
+  private cwd: string;
   private searchActive: boolean;
   private leaderActive: boolean;
   private leaderTimer: ReturnType<typeof setTimeout> | null;
@@ -253,6 +294,7 @@ class WorkflowMenuComponent extends Container {
     tui: { requestRender: () => void },
     theme: Theme,
     workflows: WorkflowDefinition[],
+    cwd: string,
     done: (value: WorkflowPick) => void,
   ) {
     super();
@@ -261,14 +303,20 @@ class WorkflowMenuComponent extends Container {
     this.workflows = workflows;
     this.mode = "workflows";
     this.current = null;
+    this.action = null;
+    this.detail = null;
     this.done = done;
+    this.cwd = cwd;
     this.searchActive = false;
+    this.preview = true;
     this.leaderActive = false;
     this.leaderTimer = null;
     this.selected = "__create__";
     this.header = new Text("", 1, 0);
     this.hint = new Text("", 1, 0);
+    this.hintWrap = new Container();
     this.list = new Container();
+    this.searchWrap = new Container();
     this.search = new Input();
     this.search.setValue("");
     this.search.focused = false;
@@ -279,17 +327,6 @@ class WorkflowMenuComponent extends Container {
       scrollInfo: (text) => this.theme.fg("dim", text),
       noMatch: (text) => this.theme.fg("warning", text),
     });
-    this.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
-    this.addChild(new Spacer(1));
-    this.addChild(this.header);
-    this.addChild(new Spacer(1));
-    this.addChild(this.search);
-    this.addChild(new Spacer(1));
-    this.addChild(this.list);
-    this.addChild(new Spacer(1));
-    this.addChild(this.hint);
-    this.addChild(new Spacer(1));
-    this.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
     this.redraw();
   }
 
@@ -322,7 +359,7 @@ class WorkflowMenuComponent extends Container {
     const title =
       this.mode === "workflows"
         ? this.theme.fg("accent", this.theme.bold(`Workflows (${this.workflows.length})`))
-        : this.theme.fg("accent", this.theme.bold(`Actions for \"${this.current?.name ?? ""}\"`));
+        : "";
     this.header.setText(title);
     if (this.leaderActive) {
       this.hint.setText(
@@ -341,10 +378,17 @@ class WorkflowMenuComponent extends Container {
               "dim",
               "Press / to search • ↑↓ or j/k select • Enter view • Ctrl+X more options • Esc close",
             )
-          : this.theme.fg("dim", "Enter confirm • Esc back • ↑↓ or j/k navigate • Ctrl+X more options"),
+          : this.theme.fg("dim", "Enter confirm • Esc close • ↑↓ or j/k navigate • v toggle preview • J/K scroll preview • Ctrl+X more options"),
       );
     }
     this.search.focused = this.searchActive;
+    if (this.mode === "actions") this.search.setValue("");
+    this.searchWrap.clear();
+    this.hintWrap.clear();
+    if (this.mode === "workflows") {
+      this.searchWrap.addChild(this.search);
+      this.hintWrap.addChild(this.hint);
+    }
     const items: SelectItem[] =
       this.mode === "workflows"
         ? [
@@ -373,7 +417,6 @@ class WorkflowMenuComponent extends Container {
               description: "Move workflow into ./.pi/skills",
             },
             { value: "delete", label: "delete", description: "Delete workflow" },
-            { value: "back", label: "back", description: "Return to workflows list" },
           ];
     this.select = new SelectList(items, 9, {
       selectedPrefix: (text) => this.theme.fg("accent", text),
@@ -389,11 +432,53 @@ class WorkflowMenuComponent extends Container {
     this.select.onCancel = () => this.cancel();
     if (this.mode === "workflows") this.select.setFilter(this.search.getValue());
     this.list.clear();
+    this.action = null;
+    this.detail = null;
+    if (this.mode === "actions" && this.current) {
+      const refs = workflowRefs(this.cwd, this.current);
+      this.detail = new WorkflowDetailPanel(this.theme, {
+        name: this.current.name,
+        description: this.current.description,
+        references: refs,
+        location: this.current.location,
+      });
+      this.action = new WorkflowActionPanel(
+        this.theme,
+        this.current.name,
+        (value) => this.confirm(value),
+        () => this.cancel(),
+      );
+      if (this.preview) this.list.addChild(this.detail);
+      this.list.addChild(this.action);
+      this.layout();
+      this.tui.requestRender();
+      return;
+    }
     this.list.addChild(this.select);
     for (let index = items.length; index < 9; index += 1) {
       this.list.addChild(new Text("⠀", 0, 0));
     }
+    this.layout();
     this.tui.requestRender();
+  }
+
+  private layout(): void {
+    this.clear();
+    if (this.mode === "actions") {
+      this.addChild(this.list);
+      return;
+    }
+    this.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
+    this.addChild(new Spacer(1));
+    this.addChild(this.header);
+    this.addChild(new Spacer(1));
+    this.addChild(this.searchWrap);
+    this.addChild(new Spacer(1));
+    this.addChild(this.list);
+    this.addChild(new Spacer(1));
+    this.addChild(this.hintWrap);
+    this.addChild(new Spacer(1));
+    this.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
   }
 
   private leaderRun(data: string): boolean {
@@ -433,14 +518,9 @@ class WorkflowMenuComponent extends Container {
       }
       this.current = workflow;
       this.mode = "actions";
+      this.preview = true;
       this.searchActive = false;
       this.search.focused = false;
-      this.redraw();
-      return;
-    }
-    if (value === "back") {
-      this.mode = "workflows";
-      this.current = null;
       this.redraw();
       return;
     }
@@ -512,11 +592,38 @@ class WorkflowMenuComponent extends Container {
       return;
     }
     if (data === "j") {
+      if (this.mode === "actions" && this.action) {
+        this.action.handleInput("\u001b[B");
+        return;
+      }
       this.select.handleInput("\u001b[B");
       return;
     }
     if (data === "k") {
+      if (this.mode === "actions" && this.action) {
+        this.action.handleInput("\u001b[A");
+        return;
+      }
       this.select.handleInput("\u001b[A");
+      return;
+    }
+    if (this.mode === "actions" && (data === "v" || data === "V")) {
+      this.preview = !this.preview;
+      this.redraw();
+      return;
+    }
+    if (this.mode === "actions" && this.detail && (data === "w" || data === "W" || data === "J")) {
+      this.detail.scrollBy(-1);
+      this.tui.requestRender();
+      return;
+    }
+    if (this.mode === "actions" && this.detail && (data === "s" || data === "S" || data === "K")) {
+      this.detail.scrollBy(1);
+      this.tui.requestRender();
+      return;
+    }
+    if (this.mode === "actions" && this.action) {
+      this.action.handleInput(data);
       return;
     }
     this.select.handleInput(data);
@@ -525,7 +632,7 @@ class WorkflowMenuComponent extends Container {
 
 async function pickWorkflow(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[]): Promise<WorkflowPick> {
   return ctx.ui.custom<WorkflowPick>((tui, theme, _keybindings, done) => {
-    return new WorkflowMenuComponent(tui, theme, workflows, done);
+    return new WorkflowMenuComponent(tui, theme, workflows, ctx.cwd, done);
   });
 }
 

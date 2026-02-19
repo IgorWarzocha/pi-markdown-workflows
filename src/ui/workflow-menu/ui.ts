@@ -1,3 +1,5 @@
+import { Text } from "@mariozechner/pi-tui";
+
 import type { WorkflowMenuComponent } from "./component.js";
 import { layoutShell } from "./layout-shell.js";
 import { layoutWorkflows } from "./layout-workflows.js";
@@ -84,7 +86,10 @@ export function leaderRun(menu: WorkflowMenuComponent, data: string): boolean {
 }
 
 export function redraw(menu: WorkflowMenuComponent): void {
-  const title = menu.mode === "workflows" ? menu.theme.fg("accent", menu.theme.bold(`Workflows (${menu.workflows.length})`)) : "";
+  const title =
+    menu.mode === "workflows"
+      ? menu.theme.fg("accent", menu.theme.bold(`Workflows (${menu.workflows.length})`))
+      : "⠀";
   menu.header.setText(title);
   if (menu.leaderActive) {
     menu.hint.setText(
@@ -102,7 +107,12 @@ export function redraw(menu: WorkflowMenuComponent): void {
   if (menu.mode === "actions") menu.search.setValue("");
   menu.searchWrap.clear();
   menu.hintWrap.clear();
-  if (menu.mode === "workflows") menu.searchWrap.addChild(menu.search);
+  if (menu.mode === "workflows") {
+    menu.searchWrap.addChild(menu.search);
+  }
+  if (menu.mode === "actions") {
+    menu.searchWrap.addChild(new Text("⠀", 1, 0));
+  }
   menu.hintWrap.addChild(menu.hint);
   if (menu.mode === "actions" && menu.current) {
     layoutActions(menu, (value) => confirm(menu, value), () => cancel(menu), () => layout(menu));

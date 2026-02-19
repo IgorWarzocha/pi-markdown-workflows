@@ -4,7 +4,7 @@ import type { Theme } from "@mariozechner/pi-coding-agent";
 import type { WorkflowDefinition, WorkflowPick } from "../../types/index.js";
 import type { WorkflowActionPanel, WorkflowDetailPanel } from "../workflow-panels.js";
 import { handleInput } from "./input.js";
-import { redraw } from "./view.js";
+import { redraw } from "./ui.js";
 
 export class WorkflowMenuComponent extends Container {
   tui: { requestRender: () => void };

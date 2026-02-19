@@ -1,7 +1,7 @@
 import { Key, getEditorKeybindings, matchesKey } from "@mariozechner/pi-tui";
 
 import type { WorkflowMenuComponent } from "./component.js";
-import { leaderRun, redraw, startLeader, startSearch } from "./view.js";
+import { leaderRun, redraw, startLeader, startSearch } from "./ui.js";
 
 export function handleInput(menu: WorkflowMenuComponent, data: string): void {
   if (menu.searchActive) {

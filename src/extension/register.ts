@@ -4,6 +4,7 @@ import { registerWorkflowsCreateTool } from "../tools/workflows-create.js";
 import { registerBeforeAgentStart } from "../hooks/before-agent-start.js";
 import { registerWorkflowsCommand } from "../commands/workflows.js";
 import { registerSkillsCommand } from "../commands/skills.js";
+import { registerLearnCommand } from "../commands/learn.js";
 import { registerSubdirContextAutoload } from "../core/subdir.js";
 
 export function registerExtension(pi: ExtensionAPI): void {
@@ -12,4 +13,5 @@ export function registerExtension(pi: ExtensionAPI): void {
   registerBeforeAgentStart(pi);
   registerWorkflowsCommand(pi);
   registerSkillsCommand(pi);
+  registerLearnCommand(pi);
 }

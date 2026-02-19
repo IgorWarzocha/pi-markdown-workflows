@@ -6,10 +6,16 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { stripFrontmatter } from "../workflow/path.js";
 import type { SkillDefinition } from "../../types/index.js";
 
-export async function injectSkillUse(pi: ExtensionAPI, skill: SkillDefinition, extra: string): Promise<void> {
+export async function injectSkillUse(
+  pi: ExtensionAPI,
+  skill: SkillDefinition,
+  extra: string,
+): Promise<void> {
   const content = await fs.promises.readFile(skill.location, "utf-8");
   const body = stripFrontmatter(content).trim();
-  const suffix = extra.trim() ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>` : "";
+  const suffix = extra.trim()
+    ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>`
+    : "";
   pi.sendUserMessage(`${body}${suffix}`.trim());
 }
 

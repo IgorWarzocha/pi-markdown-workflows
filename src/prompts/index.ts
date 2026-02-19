@@ -1,5 +1,37 @@
 import type { SkillDefinition, WorkflowDefinition } from "../types/index.js";
 
+export function learnPrompt(args: string): string {
+  const value = args.trim();
+  const block = value ? value : "(none)";
+  return [
+    "<learn_request>",
+    "<summary>",
+    "You MUST document session findings and workarounds.",
+    "You SHOULD append 1-3 concise lines to root or create a nested AGENTS.md.",
+    "Findings MUST be captured from non-obvious fixes or decisions.",
+    "</summary>",
+    "<user_guidelines>",
+    block,
+    "</user_guidelines>",
+    "<objective>",
+    "Capture critical why-decisions, workarounds, or fixes from this session.",
+    "You MUST identify findings from current context and user guidelines when present.",
+    "</objective>",
+    "<instructions>",
+    "1. Identify findings: You MUST analyze the session/task for friction points or non-obvious fixes.",
+    "2. Auto-detect scope: You MUST determine whether findings are nested-directory-specific or repository-wide.",
+    "3. Distill lesson: You MUST extract findings into 1-2 non-verbose lines and SHOULD match existing documentation style.",
+    "4. Apply: You MUST append to root or chosen nested AGENTS.md. If none exists in chosen directory, you MUST create a minimalist AGENTS.md containing only the new findings.",
+    "</instructions>",
+    "<rules>",
+    "- MUST be extremely concise (1-2 lines of new content).",
+    "- MUST focus on how to avoid this issue next time.",
+    "- MUST NOT use generic preambles or repeated information.",
+    "</rules>",
+    "</learn_request>",
+  ].join("\n");
+}
+
 export const WORKFLOW_CREATE_PROMPT = [
   "<workflow_create_request>",
   "<objective>",
@@ -16,7 +48,7 @@ export const WORKFLOW_CREATE_PROMPT = [
   "4. Content quality: You MUST include prerequisites, ordered steps, expected outcomes, and failure recovery notes for relevant edge cases.",
   "5. Scope: You SHOULD update the most specific AGENTS.md in the directory hierarchy where the work occurred (do not update repository root unless the workflow is truly global).",
   "6. Rule format: You MUST add this exact line before listing workflow names:",
-  "   \"When operating in this directory you MUST consider loading these workflows:\"",
+  '   "When operating in this directory you MUST consider loading these workflows:"',
   "</instructions>",
   "<rules>",
   "- MUST persist reusable process knowledge via workflows_create.",

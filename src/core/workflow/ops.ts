@@ -6,7 +6,10 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { WorkflowCreateInput, WorkflowDefinition } from "../../types/index.js";
 import { PRIMARY_WORKFLOW_FILE, PRIMARY_WORKFLOWS_DIR, slugify, stripFrontmatter } from "./path.js";
 
-export async function createWorkflow(cwd: string, input: WorkflowCreateInput): Promise<WorkflowDefinition> {
+export async function createWorkflow(
+  cwd: string,
+  input: WorkflowCreateInput,
+): Promise<WorkflowDefinition> {
   const slug = slugify(input.name) || "workflow";
   const workflowDir = path.join(cwd, ...PRIMARY_WORKFLOWS_DIR, slug);
   const workflowPath = path.join(workflowDir, PRIMARY_WORKFLOW_FILE);
@@ -24,10 +27,16 @@ export async function createWorkflow(cwd: string, input: WorkflowCreateInput): P
   return { name: input.name, description: input.description, location: workflowPath };
 }
 
-export async function injectWorkflowUse(pi: ExtensionAPI, workflow: WorkflowDefinition, extra: string): Promise<void> {
+export async function injectWorkflowUse(
+  pi: ExtensionAPI,
+  workflow: WorkflowDefinition,
+  extra: string,
+): Promise<void> {
   const content = await fs.promises.readFile(workflow.location, "utf-8");
   const body = stripFrontmatter(content).trim();
-  const suffix = extra.trim() ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>` : "";
+  const suffix = extra.trim()
+    ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>`
+    : "";
   pi.sendUserMessage(`${body}${suffix}`.trim());
 }
 

@@ -1,13 +1,26 @@
+import { spawn } from "node:child_process";
 import fs from "node:fs";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
 
-import { create } from "../../../sdk/template.js";
+import { create, row } from "../../../sdk/template.js";
 import { createAction } from "../../../sdk/action.js";
 import { createDetail } from "../../../sdk/detail.js";
 import { createList, type Col } from "../../../sdk/list.js";
 import { detailScroll, detailToggle } from "../../../sdk/keybind-logic.js";
-import { about, back, backtab, down, enter, esc, help, slash, tab, text, up } from "../../../sdk/keybinds.js";
+import {
+  about,
+  back,
+  backtab,
+  down,
+  enter,
+  esc,
+  help,
+  slash,
+  tab,
+  text,
+  up,
+} from "../../../sdk/keybinds.js";
 import { renderDetail } from "../../../sdk/detail-frame.js";
 import { deleteSkill, discoverSkills, injectSkillUse } from "../../core/skill.js";
 import {
@@ -50,6 +63,7 @@ type SkillListItem = {
 
 type WorkflowActionItem = {
   name: WorkflowAction;
+  label: string;
   description: string;
 };
 
@@ -94,11 +108,19 @@ function skillRows(skills: SkillDefinition[]): SkillListItem[] {
 
 function workflowActionRows(): WorkflowActionItem[] {
   return [
-    { name: "use", description: "Inject workflow for model usage" },
-    { name: "refine", description: "Refine workflow content" },
-    { name: "append-to-agents", description: "Append workflow in AGENTS.md" },
-    { name: "promote-to-skill", description: "Move workflow to ~/.pi/agent/skills" },
-    { name: "delete", description: "Delete workflow" },
+    { name: "use", label: "use", description: "Inject workflow for model usage" },
+    { name: "refine", label: "refine", description: "Refine workflow content" },
+    {
+      name: "append-to-agents",
+      label: "...agents.md",
+      description: "Append workflow reference to the closest relevant AGENTS.md",
+    },
+    {
+      name: "promote-to-skill",
+      label: "promote-to-skill",
+      description: "Move workflow to ~/.pi/agent/skills",
+    },
+    { name: "delete", label: "delete", description: "Delete workflow" },
   ];
 }
 
@@ -119,7 +141,7 @@ function listCols<T extends { name: string; description: string }>(): Col<T>[] {
 
 function workflowActionCols(): Col<WorkflowActionItem>[] {
   return [
-    { show: true, width: 20, tone: "normal", align: "left", pick: (item) => item.name },
+    { show: true, width: 20, tone: "normal", align: "left", pick: (item) => item.label },
     { show: true, width: 52, tone: "dim", align: "left", pick: (item) => item.description },
   ];
 }
@@ -157,12 +179,56 @@ function helpView() {
     body: [
       "- Workflows: repository SOPs. Agents can document them as they work, and they can be appended to AGENTS.md.",
       "- Skills: broader reusable capabilities. Prefer keeping them global under ~/.pi/agent/skills.",
+      "- Learn: use /learn to capture concise session findings into the right AGENTS.md scope.",
       "- To reduce command clutter, open /settings and set 'skill commands' to false.",
       "- Use Tab / Shift+Tab to switch Workflows and Skills tabs.",
       "- Use v to toggle detail preview and J/K to scroll preview.",
       "- Use Esc to back out of actions, close preview, or close the menu.",
     ],
   });
+}
+
+function openRepository(): void {
+  const url = "https://github.com/IgorWarzocha/pi-markdown-workflows";
+  if (process.platform === "darwin") {
+    const item = spawn("open", [url], { detached: true, stdio: "ignore" });
+    item.unref();
+    return;
+  }
+  if (process.platform === "win32") {
+    const item = spawn("cmd", ["/c", "start", "", url], { detached: true, stdio: "ignore" });
+    item.unref();
+    return;
+  }
+  const item = spawn("xdg-open", [url], { detached: true, stdio: "ignore" });
+  item.unref();
+}
+
+function aboutView() {
+  return {
+    slot: () => ({
+      title: "About Pi Markdown Workflows",
+      content: [
+        row("  Practical memory for Pi: workflows + skills + learn."),
+        row("  Workflows are repo playbooks. Skills are your broader toolbelt."),
+        row("  Less command clutter, more reusable outcomes."),
+        row(""),
+        row("  - Howaboua & Pi", "dim"),
+        row("  https://github.com/IgorWarzocha/pi-markdown-workflows", "dim"),
+      ],
+      shortcuts: "g github",
+      active: [],
+      tier: "nested" as const,
+      tab: false,
+    }),
+    up: () => {},
+    down: () => {},
+    search: () => false,
+    set: (_value: string) => {},
+    enter: () => undefined,
+    hasView: () => false,
+    view: () => undefined,
+  };
 }
 
 function createPick(
@@ -182,7 +248,8 @@ function createPick(
     search: true,
     prompt: true,
     page: 9,
-    find: (item, query) => item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
+    find: (item, query) =>
+      item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
     intent: (item) => ({ type: "action", name: `workflow:${item.key}` }),
     cols: listCols<WorkflowListItem>(),
   });
@@ -195,7 +262,8 @@ function createPick(
     search: true,
     prompt: true,
     page: 9,
-    find: (item, query) => item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
+    find: (item, query) =>
+      item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
     intent: (item) => ({ type: "action", name: `skill:${item.key}` }),
     cols: listCols<SkillListItem>(),
   });
@@ -206,7 +274,8 @@ function createPick(
       items: workflowActionRows(),
       shortcuts: "j/k select • v toggle preview • J/K scroll preview • enter confirm",
       page: 9,
-      find: (item, query) => item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
+      find: (item, query) =>
+        item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
       intent: (item) => ({ type: "action", name: item.name }),
       cols: workflowActionCols(),
     },
@@ -219,7 +288,8 @@ function createPick(
       items: skillActionRows(),
       shortcuts: "j/k select • v toggle preview • J/K scroll preview • enter confirm",
       page: 9,
-      find: (item, query) => item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
+      find: (item, query) =>
+        item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
       intent: (item) => ({ type: "action", name: item.name }),
       cols: skillActionCols(),
     },
@@ -232,7 +302,7 @@ function createPick(
     };
     const state = {
       tab: initial,
-      screen: "list" as "list" | "actions" | "help",
+      screen: "list" as "list" | "actions" | "help" | "about",
       search: false,
       query: "",
       detail: undefined as ReturnType<typeof createDetail> | undefined,
@@ -269,7 +339,11 @@ function createPick(
           return;
         }
         state.selectedWorkflow = picked.workflow;
-        state.detail = detailView(picked.workflow.name, picked.workflow.description, picked.workflow.location);
+        state.detail = detailView(
+          picked.workflow.name,
+          picked.workflow.description,
+          picked.workflow.location,
+        );
         return;
       }
       const picked = pickSkill();
@@ -298,11 +372,13 @@ function createPick(
         const slot =
           state.screen === "help"
             ? helpView().slot()
-            : state.screen === "list"
-              ? list().slot()
-              : state.tab === "workflows"
-                ? workflowActions.slot()
-                : skillActions.slot();
+            : state.screen === "about"
+              ? aboutView().slot()
+              : state.screen === "list"
+                ? list().slot()
+                : state.tab === "workflows"
+                  ? workflowActions.slot()
+                  : skillActions.slot();
         const base = create(slot, skin).render(width);
         if (!state.detail) return base;
         const top = renderDetail(state.detail.slot(), width, base.length, skin);
@@ -345,8 +421,14 @@ function createPick(
           return;
         }
 
+        if (state.screen === "about" && (data === "g" || data === "G")) {
+          openRepository();
+          ctx.ui.notify("Opened repository in browser", "info");
+          return;
+        }
+
         if (esc(data)) {
-          if (state.screen === "help") {
+          if (state.screen === "help" || state.screen === "about") {
             state.screen = "list";
             state.detail = undefined;
             tui.requestRender();
@@ -379,8 +461,17 @@ function createPick(
           return;
         }
 
-        if (state.screen === "list" && (help(data) || about(data))) {
+        if (state.screen === "list" && help(data)) {
           state.screen = "help";
+          state.search = false;
+          state.query = "";
+          state.detail = undefined;
+          tui.requestRender();
+          return;
+        }
+
+        if (state.screen === "list" && about(data)) {
+          state.screen = "about";
           state.search = false;
           state.query = "";
           state.detail = undefined;
@@ -396,7 +487,7 @@ function createPick(
           return;
         }
 
-        if (state.screen === "help") {
+        if (state.screen === "help" || state.screen === "about") {
           return;
         }
 
@@ -436,7 +527,11 @@ function createPick(
               }
               state.selectedWorkflow = picked.workflow;
               state.screen = "actions";
-              state.detail = detailView(picked.workflow.name, picked.workflow.description, picked.workflow.location);
+              state.detail = detailView(
+                picked.workflow.name,
+                picked.workflow.description,
+                picked.workflow.location,
+              );
               tui.requestRender();
               return;
             }
@@ -451,7 +546,11 @@ function createPick(
             }
             state.selectedSkill = picked.skill;
             state.screen = "actions";
-            state.detail = detailView(picked.skill.name, picked.skill.description, picked.skill.location);
+            state.detail = detailView(
+              picked.skill.name,
+              picked.skill.description,
+              picked.skill.location,
+            );
             tui.requestRender();
           }
           return;
@@ -529,21 +628,36 @@ function createPick(
   });
 }
 
-async function openMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, initial: Tab): Promise<void> {
+async function openMenu(
+  pi: ExtensionAPI,
+  ctx: ExtensionCommandContext,
+  initial: Tab,
+): Promise<void> {
   while (true) {
     const workflowDiscovery = await discoverWorkflows(ctx.cwd);
     const skillDiscovery = await discoverSkills(ctx.cwd);
-    const picked = await createPick(ctx, workflowDiscovery.workflows, skillDiscovery.skills, initial);
+    const picked = await createPick(
+      ctx,
+      workflowDiscovery.workflows,
+      skillDiscovery.skills,
+      initial,
+    );
     if (picked.type === "cancel") return;
     if (picked.type === "create-workflow") {
       const extra = await ctx.ui.input("Create workflow", "What should this workflow document?");
-      const suffix = extra && extra.trim() ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>` : "";
+      const suffix =
+        extra && extra.trim()
+          ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>`
+          : "";
       pi.sendUserMessage(`${WORKFLOW_CREATE_PROMPT}${suffix}`);
       return;
     }
     if (picked.type === "create-skill") {
       const extra = await ctx.ui.input("Create skill", "What should this skill enable?");
-      const suffix = extra && extra.trim() ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>` : "";
+      const suffix =
+        extra && extra.trim()
+          ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>`
+          : "";
       pi.sendUserMessage(`${SKILL_CREATE_PROMPT}${suffix}`);
       return;
     }
@@ -557,7 +671,10 @@ async function openMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, initial:
         pi.sendUserMessage(refineSkillPrompt(picked.skill));
         return;
       }
-      const confirmed = await ctx.ui.confirm("Delete skill", `Delete skill '${picked.skill.name}'?`);
+      const confirmed = await ctx.ui.confirm(
+        "Delete skill",
+        `Delete skill '${picked.skill.name}'?`,
+      );
       if (!confirmed) continue;
       await deleteSkill(picked.skill);
       ctx.ui.notify(`Skill '${picked.skill.name}' deleted`, "info");
@@ -568,8 +685,10 @@ async function openMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, initial:
       await injectWorkflowUse(pi, picked.workflow, extra);
       return;
     }
-    if (picked.action === "refine") return pi.sendUserMessage(refineWorkflowPrompt(picked.workflow));
-    if (picked.action === "append-to-agents") return pi.sendUserMessage(appendWorkflowAgentsPrompt(picked.workflow));
+    if (picked.action === "refine")
+      return pi.sendUserMessage(refineWorkflowPrompt(picked.workflow));
+    if (picked.action === "append-to-agents")
+      return pi.sendUserMessage(appendWorkflowAgentsPrompt(picked.workflow));
     if (picked.action === "promote-to-skill") {
       const confirmed = await ctx.ui.confirm(
         "Promote workflow",
@@ -580,17 +699,26 @@ async function openMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, initial:
       ctx.ui.notify(`Workflow promoted to ${target}`, "info");
       continue;
     }
-    const confirmed = await ctx.ui.confirm("Delete workflow", `Delete workflow '${picked.workflow.name}'?`);
+    const confirmed = await ctx.ui.confirm(
+      "Delete workflow",
+      `Delete workflow '${picked.workflow.name}'?`,
+    );
     if (!confirmed) continue;
     await deleteWorkflow(picked.workflow);
     ctx.ui.notify(`Workflow '${picked.workflow.name}' deleted`, "info");
   }
 }
 
-export async function openWorkflowsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
+export async function openWorkflowsMenu(
+  pi: ExtensionAPI,
+  ctx: ExtensionCommandContext,
+): Promise<void> {
   await openMenu(pi, ctx, "workflows");
 }
 
-export async function openSkillsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
+export async function openSkillsMenu(
+  pi: ExtensionAPI,
+  ctx: ExtensionCommandContext,
+): Promise<void> {
   await openMenu(pi, ctx, "skills");
 }

@@ -82,7 +82,9 @@ function readSkill(file: string): SkillDefinition | null {
   }
 }
 
-export async function discoverSkills(cwd: string): Promise<{ skills: SkillDefinition[]; checkedDirs: string[] }> {
+export async function discoverSkills(
+  cwd: string,
+): Promise<{ skills: SkillDefinition[]; checkedDirs: string[] }> {
   const checkedDirs: string[] = [];
   const skills = discoverSkillsSync(cwd, checkedDirs);
   return { skills, checkedDirs };

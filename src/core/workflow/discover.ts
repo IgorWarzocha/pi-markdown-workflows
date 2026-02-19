@@ -7,7 +7,9 @@ import { parseWorkflowFrontmatter, PRIMARY_WORKFLOW_FILE, PRIMARY_WORKFLOWS_DIR 
 export async function discoverWorkflows(
   cwd: string,
 ): Promise<{ workflows: WorkflowDefinition[]; checkedDirs: string[] }> {
-  const candidates = [{ root: path.join(cwd, ...PRIMARY_WORKFLOWS_DIR), file: PRIMARY_WORKFLOW_FILE }] as const;
+  const candidates = [
+    { root: path.join(cwd, ...PRIMARY_WORKFLOWS_DIR), file: PRIMARY_WORKFLOW_FILE },
+  ] as const;
   const workflows: WorkflowDefinition[] = [];
   const checkedDirs: string[] = [];
   const seenNames = new Set<string>();

@@ -10,7 +10,7 @@ This file defines development rules for `/sdk`.
 ## Change Authorization
 
 - Agents MUST NOT change `/sdk` unless the user explicitly requests SDK changes.
-- If a task can be solved in `sdk/example` (or another extension consumer), agents MUST prefer that path.
+- If a task can be solved in an extension consumer instead of `/sdk`, agents MUST prefer that path.
 - Before changing `/sdk`, agents MUST state why consumer-level changes are insufficient.
 
 ## Compatibility

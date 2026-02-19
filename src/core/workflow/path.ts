@@ -21,7 +21,9 @@ export function stripFrontmatter(body: string): string {
   return match ? body.slice(match[0].length) : body;
 }
 
-export function parseWorkflowFrontmatter(content: string): Omit<WorkflowDefinition, "location"> | null {
+export function parseWorkflowFrontmatter(
+  content: string,
+): Omit<WorkflowDefinition, "location"> | null {
   const frontmatterMatch = content.match(/^---\n([\s\S]+?)\n---/);
   if (!frontmatterMatch) return null;
   const frontmatter = frontmatterMatch[1] ?? "";

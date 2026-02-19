@@ -2,7 +2,13 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { DynamicBorder, type Theme } from "@mariozechner/pi-coding-agent";
+import { Container, Input, SelectList, Spacer, Text, type SelectItem } from "@mariozechner/pi-tui";
+import type {
+  ExtensionAPI,
+  ExtensionCommandContext,
+  ExtensionContext,
+} from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 
 type TextContent = { type: "text"; text: string };
@@ -16,32 +22,6 @@ type WorkflowCreateInput = {
 
 const PRIMARY_WORKFLOWS_DIR = [".pi", "workflows"];
 const PRIMARY_WORKFLOW_FILE = "SKILL.md";
-
-const WORKFLOW_COMMAND_INSTRUCTIONS = `
-<summary>
-Document this session as a reusable workflow and enforce usage guidance via AGENTS.md.
-</summary>
-
-<objective>
-Capture what worked into a repeatable procedure using workflows_create, then make future agents in this scope aware of it via AGENTS.md.
-</objective>
-
-<instructions>
-1. Discovery: You SHOULD inspect <available_workflows> first and read existing workflow files to avoid duplicates.
-2. Authoring: You MUST use workflows_create to create or update a workflow in ./.pi/workflows/<name>/SKILL.md.
-3. Content quality: You SHOULD include prerequisites, ordered steps, expected outcomes, and any failure recovery notes.
-4. Scope: You SHOULD update the most specific AGENTS.md in the directory hierarchy where the work occurred (do not update repository root unless the workflow is truly global).
-5. Rule format: You MUST add this exact line before listing workflow names:
-   "When operating in this directory you MUST consider loading these workflows:"
-</instructions>
-
-<rules>
-- MUST persist reusable process knowledge via workflows_create.
-- MUST use the exact required AGENTS.md phrasing.
-- MUST keep AGENTS.md edits minimal and targeted.
-- MAY refine an existing workflow instead of creating a duplicate.
-</rules>
-`;
 
 function normalizeAtPrefix(inputPath: string): string {
   return inputPath.startsWith("@") ? inputPath.slice(1) : inputPath;
@@ -135,6 +115,282 @@ function discoverWorkflowsSync(cwd: string): WorkflowDefinition[] {
     }
   }
   return workflows;
+}
+
+async function createWorkflow(cwd: string, input: WorkflowCreateInput): Promise<WorkflowDefinition> {
+  const slug = slugify(input.name) || "workflow";
+  const workflowDir = path.join(cwd, ...PRIMARY_WORKFLOWS_DIR, slug);
+  const workflowPath = path.join(workflowDir, PRIMARY_WORKFLOW_FILE);
+  const content = [
+    "---",
+    `name: ${input.name}`,
+    `description: ${input.description}`,
+    "---",
+    "",
+    stripFrontmatter(input.body).trim(),
+    "",
+  ].join("\n");
+  await fs.promises.mkdir(workflowDir, { recursive: true });
+  await fs.promises.writeFile(workflowPath, content, "utf-8");
+  return { name: input.name, description: input.description, location: workflowPath };
+}
+
+async function injectWorkflowUse(pi: ExtensionAPI, workflow: WorkflowDefinition, extra: string): Promise<void> {
+  const content = await fs.promises.readFile(workflow.location, "utf-8");
+  const body = stripFrontmatter(content).trim();
+  const suffix = extra.trim() ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>` : "";
+  pi.sendUserMessage(`${body}${suffix}`.trim());
+}
+
+function refineWorkflowPrompt(workflow: WorkflowDefinition): string {
+  return [
+    "<workflow_refine_request>",
+    `<name>${workflow.name}</name>`,
+    `<location>${workflow.location}</location>`,
+    "<requirements>",
+    "You MUST refine this workflow to strict quality standards.",
+    "You MUST use RFC 2119 keywords correctly and consistently.",
+    "You MUST improve structure clarity with deterministic ordered execution and verification criteria.",
+    "You SHOULD use concise XML structure where this improves unambiguous execution guidance.",
+    "You MUST assess whether the workflow is functional end-to-end and fix identified issues safely.",
+    "You MUST preserve intent while improving reliability.",
+    "</requirements>",
+    "</workflow_refine_request>",
+  ].join("\n");
+}
+
+function appendWorkflowAgentsPrompt(workflow: WorkflowDefinition): string {
+  return [
+    "<workflow_append_agents_request>",
+    `<name>${workflow.name}</name>`,
+    `<location>${workflow.location}</location>`,
+    "<requirements>",
+    "You MUST locate the most specific applicable AGENTS.md for this workflow scope.",
+    "You MUST verify whether this workflow is already listed before any edits.",
+    "You MUST keep edits minimal and idempotent.",
+    "You MUST include the exact heading line before entries:",
+    "When operating in this directory you MUST consider loading these workflows:",
+    "</requirements>",
+    "</workflow_append_agents_request>",
+  ].join("\n");
+}
+
+async function promoteWorkflow(cwd: string, workflow: WorkflowDefinition): Promise<string> {
+  const slug = slugify(workflow.name) || "workflow";
+  const skillDir = path.join(cwd, ".pi", "skills", slug);
+  const target = path.join(skillDir, PRIMARY_WORKFLOW_FILE);
+  await fs.promises.mkdir(skillDir, { recursive: true });
+  const content = await fs.promises.readFile(workflow.location, "utf-8");
+  await fs.promises.writeFile(target, content, "utf-8");
+  await fs.promises.rm(path.dirname(workflow.location), { recursive: true, force: true });
+  return target;
+}
+
+async function deleteWorkflow(workflow: WorkflowDefinition): Promise<void> {
+  await fs.promises.rm(path.dirname(workflow.location), { recursive: true, force: true });
+}
+
+class WorkflowSelectorComponent extends Container {
+  private select: SelectList;
+
+  constructor(
+    theme: Theme,
+    workflows: WorkflowDefinition[],
+    onSelect: (value: string) => void,
+    onCancel: () => void,
+  ) {
+    super();
+    const items: SelectItem[] = [
+      { value: "__create__", label: "Create new workflow...", description: "Create a workflow manually" },
+      ...workflows.map((workflow) => ({
+        value: workflow.name,
+        label: workflow.name,
+        description: workflow.description,
+      })),
+    ];
+    this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    this.addChild(new Spacer(1));
+    this.addChild(new Text(theme.fg("accent", theme.bold(`Workflows (${workflows.length})`)), 1, 0));
+    this.addChild(new Spacer(1));
+    const search = new Input();
+    search.setValue("");
+    search.focused = false;
+    this.addChild(search);
+    this.addChild(new Spacer(1));
+    this.select = new SelectList(items, 9, {
+      selectedPrefix: (text) => theme.fg("accent", text),
+      selectedText: (text) => theme.fg("accent", text),
+      description: (text) => theme.fg("muted", text),
+      scrollInfo: (text) => theme.fg("dim", text),
+      noMatch: (text) => theme.fg("warning", text),
+    });
+    this.select.onSelect = (item) => onSelect(item.value);
+    this.select.onCancel = onCancel;
+    this.addChild(this.select);
+    for (let index = items.length; index < 9; index += 1) {
+      this.addChild(new Text("⠀", 0, 0));
+    }
+    this.addChild(new Spacer(1));
+    this.addChild(
+      new Text(
+        theme.fg(
+          "dim",
+          "Press / to search • ↑↓ or j/k select • Enter select • Esc close",
+        ),
+        1,
+        0,
+      ),
+    );
+    this.addChild(new Spacer(1));
+    this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+  }
+
+  handleInput(data: string): void {
+    if (data === "j") {
+      this.select.handleInput("\u001b[B");
+      return;
+    }
+    if (data === "k") {
+      this.select.handleInput("\u001b[A");
+      return;
+    }
+    this.select.handleInput(data);
+  }
+}
+
+async function pickWorkflow(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[]): Promise<string | null> {
+  return ctx.ui.custom<string | null>((_tui, theme, _keybindings, done) => {
+    return new WorkflowSelectorComponent(theme, workflows, (value) => done(value), () => done(null));
+  });
+}
+
+class WorkflowActionComponent extends Container {
+  private select: SelectList;
+
+  constructor(theme: Theme, workflow: WorkflowDefinition, onSelect: (value: string) => void, onCancel: () => void) {
+    super();
+    const items: SelectItem[] = [
+      { value: "use", label: "use", description: "Inject workflow body and optional user instructions" },
+      { value: "refine", label: "refine", description: "Refine workflow with XML + RFC quality mission" },
+      { value: "append-to-agents", label: "append-to-agents", description: "Append workflow to AGENTS.md safely" },
+      { value: "promote-to-skill", label: "promote-to-skill", description: "Move workflow into ./.pi/skills" },
+      { value: "delete", label: "delete", description: "Delete workflow" },
+      { value: "back", label: "back", description: "Return to workflows list" },
+    ];
+    this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    this.addChild(new Text(theme.fg("accent", theme.bold(`Actions for \"${workflow.name}\"`)), 1, 0));
+    this.select = new SelectList(items, 10, {
+      selectedPrefix: (text) => theme.fg("accent", text),
+      selectedText: (text) => theme.fg("accent", text),
+      description: (text) => theme.fg("muted", text),
+      scrollInfo: (text) => theme.fg("dim", text),
+      noMatch: (text) => theme.fg("warning", text),
+    });
+    this.select.onSelect = (item) => onSelect(item.value);
+    this.select.onCancel = onCancel;
+    this.addChild(this.select);
+    for (let index = items.length; index < 10; index += 1) {
+      this.addChild(new Text("⠀", 0, 0));
+    }
+    this.addChild(new Text(theme.fg("dim", "Enter select • Esc back • ↑/↓ or j/k navigate"), 1, 0));
+    this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+  }
+
+  handleInput(data: string): void {
+    if (data === "j") {
+      this.select.handleInput("\u001b[B");
+      return;
+    }
+    if (data === "k") {
+      this.select.handleInput("\u001b[A");
+      return;
+    }
+    this.select.handleInput(data);
+  }
+}
+
+async function pickWorkflowAction(
+  ctx: ExtensionCommandContext,
+  workflow: WorkflowDefinition,
+): Promise<string | null> {
+  return ctx.ui.custom<string | null>((_tui, theme, _keybindings, done) => {
+    return new WorkflowActionComponent(theme, workflow, (value) => done(value), () => done(null));
+  });
+}
+
+async function createWorkflowFromUi(ctx: ExtensionCommandContext): Promise<void> {
+  const name = await ctx.ui.input("Create workflow", "Workflow name");
+  if (!name || !name.trim()) return;
+  const description = await ctx.ui.input("Create workflow", "Workflow description");
+  if (!description || !description.trim()) return;
+  const body = await ctx.ui.editor(
+    "Create workflow",
+    "## Prerequisites\n\n## Steps\n1. \n\n## Expected outcome\n\n## Recovery\n",
+  );
+  if (!body || !body.trim()) return;
+  const workflow = await createWorkflow(ctx.cwd, {
+    name: name.trim(),
+    description: description.trim(),
+    body: body.trim(),
+  });
+  ctx.ui.notify(`Workflow created at ${workflow.location}`, "info");
+}
+
+async function openWorkflowActions(
+  pi: ExtensionAPI,
+  ctx: ExtensionCommandContext,
+  workflow: WorkflowDefinition,
+): Promise<"refresh" | "back" | "done"> {
+  const action = await pickWorkflowAction(ctx, workflow);
+  if (!action || action === "back") return "back";
+  if (action === "use") {
+    const extra = (await ctx.ui.input("Use workflow", "Optional instructions")) ?? "";
+    await injectWorkflowUse(pi, workflow, extra);
+    return "done";
+  }
+  if (action === "refine") {
+    pi.sendUserMessage(refineWorkflowPrompt(workflow));
+    return "done";
+  }
+  if (action === "append-to-agents") {
+    pi.sendUserMessage(appendWorkflowAgentsPrompt(workflow));
+    return "done";
+  }
+  if (action === "promote-to-skill") {
+    const confirmed = await ctx.ui.confirm(
+      "Promote workflow",
+      `Promote ${workflow.name} to ./.pi/skills and remove it from workflows?`,
+    );
+    if (!confirmed) return "back";
+    const target = await promoteWorkflow(ctx.cwd, workflow);
+    ctx.ui.notify(`Workflow promoted to ${target}`, "info");
+    return "refresh";
+  }
+  const confirmed = await ctx.ui.confirm("Delete workflow", `Delete workflow '${workflow.name}'?`);
+  if (!confirmed) return "back";
+  await deleteWorkflow(workflow);
+  ctx.ui.notify(`Workflow '${workflow.name}' deleted`, "info");
+  return "refresh";
+}
+
+async function openWorkflowsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
+  while (true) {
+    const discovery = await discoverWorkflows(ctx.cwd);
+    const selected = await pickWorkflow(ctx, discovery.workflows);
+    if (!selected) return;
+    if (selected === "__create__") {
+      await createWorkflowFromUi(ctx);
+      continue;
+    }
+    const workflow = discovery.workflows.find((item) => item.name === selected);
+    if (!workflow) {
+      ctx.ui.notify("Workflow not found after refresh", "error");
+      continue;
+    }
+    const result = await openWorkflowActions(pi, ctx, workflow);
+    if (result === "refresh") continue;
+    if (result === "done") return;
+  }
 }
 
 function buildAvailableWorkflowsXml(workflows: WorkflowDefinition[], cwd: string): string {
@@ -337,44 +593,6 @@ function registerSubdirContextAutoload(pi: ExtensionAPI): void {
 export default function piWorkflowsToolExtension(pi: ExtensionAPI): void {
   registerSubdirContextAutoload(pi);
 
-  const registeredWorkflowCommands = new Set<string>();
-
-  const sendWorkflowMessage = async (workflow: WorkflowDefinition, args: string): Promise<void> => {
-    const content = await fs.promises.readFile(workflow.location, "utf-8");
-    const body = stripFrontmatter(content).trim();
-    const baseDir = path.dirname(workflow.location);
-    const workflowBlock = `<workflow name="${workflow.name}" location="${workflow.location}">\nReferences are relative to ${baseDir}.\n\n${body}\n</workflow>`;
-    const suffix = args.trim() ? `\n\n${args.trim()}` : "";
-    pi.sendUserMessage(`${workflowBlock}${suffix}`);
-  };
-
-  const registerWorkflowSlashCommands = async (cwd: string): Promise<void> => {
-    const discovery = await discoverWorkflows(cwd);
-    for (const workflow of discovery.workflows) {
-      const commandName = `workflow:${workflow.name}`;
-      if (registeredWorkflowCommands.has(commandName)) continue;
-      registeredWorkflowCommands.add(commandName);
-      pi.registerCommand(commandName, {
-        description: workflow.description,
-        handler: async (args) => {
-          await sendWorkflowMessage(workflow, args);
-        },
-      });
-    }
-  };
-
-  pi.on("session_start", async (_event, ctx) => {
-    await registerWorkflowSlashCommands(ctx.cwd);
-  });
-
-  pi.on("session_switch", async (_event, ctx) => {
-    await registerWorkflowSlashCommands(ctx.cwd);
-  });
-
-  pi.on("resources_discover", async (_event, ctx) => {
-    await registerWorkflowSlashCommands(ctx.cwd);
-  });
-
   pi.registerTool({
     name: "workflows_create",
     label: "Create Workflow",
@@ -389,25 +607,10 @@ export default function piWorkflowsToolExtension(pi: ExtensionAPI): void {
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = params as WorkflowCreateInput;
-      const slug = slugify(input.name) || "workflow";
-      const workflowDir = path.join(ctx.cwd, ...PRIMARY_WORKFLOWS_DIR, slug);
-      const workflowPath = path.join(workflowDir, PRIMARY_WORKFLOW_FILE);
-      const content = [
-        "---",
-        `name: ${input.name}`,
-        `description: ${input.description}`,
-        "---",
-        "",
-        stripFrontmatter(input.body).trim(),
-        "",
-      ].join("\n");
-
-      await fs.promises.mkdir(workflowDir, { recursive: true });
-      await fs.promises.writeFile(workflowPath, content, "utf-8");
-
+      const workflow = await createWorkflow(ctx.cwd, input);
       return {
-        content: [{ type: "text", text: `Workflow created at ${workflowPath}` }],
-        details: { name: input.name, path: workflowPath },
+        content: [{ type: "text", text: `Workflow created at ${workflow.location}` }],
+        details: { name: input.name, path: workflow.location },
       };
     },
   });
@@ -418,16 +621,17 @@ export default function piWorkflowsToolExtension(pi: ExtensionAPI): void {
     return suffix ? { systemPrompt: `${event.systemPrompt}${suffix}` } : undefined;
   });
 
-  pi.registerCommand("workflow", {
+  pi.registerCommand("workflows", {
     description:
-      "Use '/workflow <name>' to inject a workflow; use '/workflow' to capture the current session as a reusable workflow.",
+      "Open workflows GUI and choose: create workflow, use, refine, append-to-agents, promote-to-skill, delete.",
     getArgumentCompletions: (argumentPrefix: string) => {
       const workflows = discoverWorkflowsSync(process.cwd());
       const prefix = argumentPrefix.trim().toLowerCase();
       const filtered = prefix
         ? workflows.filter(
-            (w) =>
-              w.name.toLowerCase().includes(prefix) || w.description.toLowerCase().includes(prefix),
+            (workflow) =>
+              workflow.name.toLowerCase().includes(prefix) ||
+              workflow.description.toLowerCase().includes(prefix),
           )
         : workflows;
       if (!filtered.length) return null;
@@ -437,28 +641,8 @@ export default function piWorkflowsToolExtension(pi: ExtensionAPI): void {
         description: workflow.description,
       }));
     },
-    handler: async (args, ctx) => {
-      const trimmed = args.trim();
-      if (!trimmed) {
-        pi.sendUserMessage(WORKFLOW_COMMAND_INSTRUCTIONS);
-        return;
-      }
-
-      const workflows = discoverWorkflowsSync(ctx.cwd);
-      const exact = workflows.find((w) => w.name === trimmed);
-      if (exact) {
-        await sendWorkflowMessage(exact, "");
-        return;
-      }
-
-      const fuzzy = workflows.find((w) => w.name.toLowerCase().includes(trimmed.toLowerCase()));
-      if (fuzzy) {
-        await sendWorkflowMessage(fuzzy, "");
-        return;
-      }
-
-      const available = workflows.map((w) => w.name).join(", ") || "none";
-      throw new Error(`Workflow '${trimmed}' not found. Available workflows: ${available}`);
+    handler: async (_args, ctx) => {
+      await openWorkflowsMenu(pi, ctx);
     },
   });
 }

@@ -14,7 +14,7 @@
     "dist",
     "LICENSE",
     "README.md",
-    "src"
+    "index.ts"
   ],
   "type": "module",
   "main": "./dist/index.js",

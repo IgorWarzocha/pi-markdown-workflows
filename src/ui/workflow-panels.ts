@@ -186,7 +186,6 @@ export class WorkflowActionPanel extends Container {
     this.addChild(new Spacer(1));
     this.addChild(this.footer);
     this.addChild(new Spacer(1));
-    this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
   }
 
   setFooter(value: string, tone: "dim" | "warning" = "dim"): void {

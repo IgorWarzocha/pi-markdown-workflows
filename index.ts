@@ -478,10 +478,6 @@ class WorkflowMenuComponent extends Container {
 
   private layout(): void {
     this.clear();
-    if (this.mode === "actions") {
-      this.addChild(this.list);
-      return;
-    }
     this.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
     this.addChild(new Spacer(1));
     this.addChild(this.header);
@@ -489,9 +485,11 @@ class WorkflowMenuComponent extends Container {
     this.addChild(this.searchWrap);
     this.addChild(new Spacer(1));
     this.addChild(this.list);
-    this.addChild(new Spacer(1));
-    this.addChild(this.hintWrap);
-    this.addChild(new Spacer(1));
+    if (this.mode === "workflows") {
+      this.addChild(new Spacer(1));
+      this.addChild(this.hintWrap);
+      this.addChild(new Spacer(1));
+    }
     this.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
   }
 

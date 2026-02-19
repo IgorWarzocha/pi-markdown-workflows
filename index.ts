@@ -334,6 +334,11 @@ class WorkflowMenuComponent extends Container {
     if (this.leaderTimer) clearTimeout(this.leaderTimer);
     this.leaderTimer = null;
     this.leaderActive = false;
+    if (this.mode === "actions" && this.action) {
+      this.action.setFooter(
+        "Enter confirm • Esc close • v toggle preview • J/K scroll preview • Ctrl+X more options",
+      );
+    }
     this.redraw();
   }
 
@@ -343,6 +348,12 @@ class WorkflowMenuComponent extends Container {
       return;
     }
     this.leaderActive = true;
+    if (this.mode === "actions" && this.action) {
+      this.action.setFooter(
+        "More options: u use • r refine • a append • p promote • d delete",
+        "warning",
+      );
+    }
     if (this.leaderTimer) clearTimeout(this.leaderTimer);
     this.leaderTimer = setTimeout(() => this.clearLeader(), 2000);
     this.redraw();
@@ -448,6 +459,9 @@ class WorkflowMenuComponent extends Container {
         (value) => this.confirm(value),
         () => this.cancel(),
       );
+      if (this.leaderActive) {
+        this.action.setFooter("More options: u use • r refine • a append • p promote • d delete", "warning");
+      }
       if (this.preview) this.list.addChild(this.detail);
       this.list.addChild(this.action);
       this.layout();

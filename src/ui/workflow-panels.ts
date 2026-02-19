@@ -4,6 +4,7 @@ import {
   Container,
   Markdown,
   SelectList,
+  Spacer,
   Text,
   truncateToWidth,
   visibleWidth,
@@ -139,9 +140,12 @@ export class WorkflowDetailPanel extends Container {
 
 export class WorkflowActionPanel extends Container {
   private list: SelectList;
+  private footer: Text;
+  private theme: Theme;
 
   constructor(theme: Theme, title: string, onSelect: (value: string) => void, onCancel: () => void) {
     super();
+    this.theme = theme;
     const items: SelectItem[] = [
       { value: "use", label: "use", description: "Inject workflow body and user instructions" },
       { value: "refine", label: "refine", description: "Refine workflow with XML + RFC quality" },
@@ -158,7 +162,9 @@ export class WorkflowActionPanel extends Container {
       { value: "delete", label: "delete", description: "Delete workflow" },
     ];
     this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    this.addChild(new Spacer(1));
     this.addChild(new Text(theme.fg("accent", theme.bold(`Actions for \"${title}\"`)), 1, 0));
+    this.addChild(new Spacer(1));
     this.list = new SelectList(items, 10, {
       selectedPrefix: (text) => theme.fg("accent", text),
       selectedText: (text) => theme.fg("accent", text),
@@ -172,8 +178,19 @@ export class WorkflowActionPanel extends Container {
     for (let index = items.length; index < 10; index += 1) {
       this.addChild(new Text("⠀", 0, 0));
     }
-    this.addChild(new Text(theme.fg("dim", "Enter confirm • Esc close • v toggle preview • J/K scroll preview • Ctrl+X more options"), 1, 0));
+    this.footer = new Text(
+      theme.fg("dim", "Enter confirm • Esc close • v toggle preview • J/K scroll preview • Ctrl+X more options"),
+      1,
+      0,
+    );
+    this.addChild(new Spacer(1));
+    this.addChild(this.footer);
+    this.addChild(new Spacer(1));
     this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+  }
+
+  setFooter(value: string, tone: "dim" | "warning" = "dim"): void {
+    this.footer.setText(this.theme.fg(tone, value));
   }
 
   handleInput(data: string): void {

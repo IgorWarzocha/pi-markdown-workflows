@@ -1,0 +1,44 @@
+{
+  "name": "@howaboua/pi-workflows-tool",
+  "version": "0.1.0",
+  "description": "Pi extension with workflows tools and embedded subdirectory AGENTS.md context loading",
+  "keywords": [
+    "agents",
+    "pi-extension",
+    "pi-package",
+    "workflows"
+  ],
+  "license": "MIT",
+  "files": [
+    "AGENTS.md",
+    "dist",
+    "LICENSE",
+    "README.md",
+    "src"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.41"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./dist/index.js"
+    ]
+  }
+}

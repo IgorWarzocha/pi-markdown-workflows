@@ -201,6 +201,32 @@ async function deleteWorkflow(workflow: WorkflowDefinition): Promise<void> {
 }
 
 type WorkflowAction = "use" | "refine" | "append-to-agents" | "promote-to-skill" | "delete";
+
+const WORKFLOW_CREATE_PROMPT = [
+  "<summary>",
+  "Document this session as a reusable workflow and enforce usage guidance via AGENTS.md.",
+  "</summary>",
+  "",
+  "<objective>",
+  "Capture what worked into a repeatable procedure using workflows_create, then make future agents in this scope aware of it via AGENTS.md.",
+  "</objective>",
+  "",
+  "<instructions>",
+  "1. Discovery: You SHOULD inspect <available_workflows> first and read existing workflow files to avoid duplicates.",
+  "2. Authoring: You MUST use workflows_create to create or update a workflow in ./.pi/workflows/<name>/SKILL.md.",
+  "3. Content quality: You SHOULD include prerequisites, ordered steps, expected outcomes, and any failure recovery notes.",
+  "4. Scope: You SHOULD update the most specific AGENTS.md in the directory hierarchy where the work occurred (do not update repository root unless the workflow is truly global).",
+  "5. Rule format: You MUST add this exact line before listing workflow names:",
+  "   \"When operating in this directory you MUST consider loading these workflows:\"",
+  "</instructions>",
+  "",
+  "<rules>",
+  "- MUST persist reusable process knowledge via workflows_create.",
+  "- MUST use the exact required AGENTS.md phrasing.",
+  "- MUST keep AGENTS.md edits minimal and targeted.",
+  "- MAY refine an existing workflow instead of creating a duplicate.",
+  "</rules>",
+].join("\n");
 type WorkflowPick =
   | { type: "cancel" }
   | { type: "create" }
@@ -503,32 +529,19 @@ async function pickWorkflow(ctx: ExtensionCommandContext, workflows: WorkflowDef
   });
 }
 
-async function createWorkflowFromUi(ctx: ExtensionCommandContext): Promise<void> {
-  const name = await ctx.ui.input("Create workflow", "Workflow name");
-  if (!name || !name.trim()) return;
-  const description = await ctx.ui.input("Create workflow", "Workflow description");
-  if (!description || !description.trim()) return;
-  const body = await ctx.ui.editor(
-    "Create workflow",
-    "## Prerequisites\n\n## Steps\n1. \n\n## Expected outcome\n\n## Recovery\n",
-  );
-  if (!body || !body.trim()) return;
-  const workflow = await createWorkflow(ctx.cwd, {
-    name: name.trim(),
-    description: description.trim(),
-    body: body.trim(),
-  });
-  ctx.ui.notify(`Workflow created at ${workflow.location}`, "info");
-}
-
 async function openWorkflowsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
   while (true) {
     const discovery = await discoverWorkflows(ctx.cwd);
     const picked = await pickWorkflow(ctx, discovery.workflows);
     if (picked.type === "cancel") return;
     if (picked.type === "create") {
-      await createWorkflowFromUi(ctx);
-      continue;
+      const extra = await ctx.ui.input(
+        "Create workflow",
+        "What should this workflow document?",
+      );
+      const suffix = extra && extra.trim() ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>` : "";
+      pi.sendUserMessage(`${WORKFLOW_CREATE_PROMPT}${suffix}`);
+      return;
     }
     if (picked.action === "use") {
       const extra = (await ctx.ui.input("Use workflow", "Optional instructions")) ?? "";

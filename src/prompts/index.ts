@@ -1,4 +1,4 @@
-import type { WorkflowDefinition } from "../types/index.js";
+import type { SkillDefinition, WorkflowDefinition } from "../types/index.js";
 
 export const WORKFLOW_CREATE_PROMPT = [
   "<summary>",
@@ -56,5 +56,20 @@ export function appendWorkflowAgentsPrompt(workflow: WorkflowDefinition): string
     "When operating in this directory you MUST consider loading these workflows:",
     "</requirements>",
     "</workflow_append_agents_request>",
+  ].join("\n");
+}
+
+export function refineSkillPrompt(skill: SkillDefinition): string {
+  return [
+    "<skill_refine_request>",
+    `<name>${skill.name}</name>`,
+    `<location>${skill.location}</location>`,
+    "<requirements>",
+    "You MUST refine this skill to strict quality standards.",
+    "You MUST preserve required SKILL.md frontmatter fields and keep name stable unless user requests rename.",
+    "You MUST improve clarity, deterministic execution, and verification guidance.",
+    "You SHOULD include concise setup, usage, and failure recovery guidance.",
+    "</requirements>",
+    "</skill_refine_request>",
   ].join("\n");
 }

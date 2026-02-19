@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
@@ -32,7 +33,7 @@ export async function injectWorkflowUse(pi: ExtensionAPI, workflow: WorkflowDefi
 
 export async function promoteWorkflow(cwd: string, workflow: WorkflowDefinition): Promise<string> {
   const slug = slugify(workflow.name) || "workflow";
-  const skillDir = path.join(cwd, ".pi", "skills", slug);
+  const skillDir = path.join(os.homedir(), ".pi", "agent", "skills", slug);
   const target = path.join(skillDir, PRIMARY_WORKFLOW_FILE);
   await fs.promises.mkdir(skillDir, { recursive: true });
   const content = await fs.promises.readFile(workflow.location, "utf-8");

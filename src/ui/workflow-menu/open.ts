@@ -7,9 +7,15 @@ import { createAction } from "../../../sdk/action.js";
 import { createDetail } from "../../../sdk/detail.js";
 import { createList, type Col } from "../../../sdk/list.js";
 import { detailScroll, detailToggle } from "../../../sdk/keybind-logic.js";
-import { down, enter, esc, slash, up, back, text } from "../../../sdk/keybinds.js";
+import { about, back, backtab, down, enter, esc, help, slash, tab, text, up } from "../../../sdk/keybinds.js";
 import { renderDetail } from "../../../sdk/detail-frame.js";
-import { WORKFLOW_CREATE_PROMPT, appendWorkflowAgentsPrompt, refineWorkflowPrompt } from "../../prompts/index.js";
+import { deleteSkill, discoverSkills, injectSkillUse } from "../../core/skill.js";
+import {
+  WORKFLOW_CREATE_PROMPT,
+  appendWorkflowAgentsPrompt,
+  refineSkillPrompt,
+  refineWorkflowPrompt,
+} from "../../prompts/index.js";
 import {
   deleteWorkflow,
   discoverWorkflows,
@@ -17,21 +23,41 @@ import {
   promoteWorkflow,
   stripFrontmatter,
 } from "../../core/workflow.js";
-import type { WorkflowAction, WorkflowDefinition, WorkflowPick } from "../../types/index.js";
+import type {
+  SkillAction,
+  SkillDefinition,
+  WorkflowAction,
+  WorkflowDefinition,
+  WorkflowPick,
+} from "../../types/index.js";
 
-type ListItem = {
+type Tab = "workflows" | "skills";
+
+type WorkflowListItem = {
   key: string;
   name: string;
   description: string;
   workflow: WorkflowDefinition | null;
 };
 
-type ActionItem = {
+type SkillListItem = {
+  key: string;
+  name: string;
+  description: string;
+  skill: SkillDefinition;
+};
+
+type WorkflowActionItem = {
   name: WorkflowAction;
   description: string;
 };
 
-function listRows(workflows: WorkflowDefinition[]): ListItem[] {
+type SkillActionItem = {
+  name: SkillAction;
+  description: string;
+};
+
+function workflowRows(workflows: WorkflowDefinition[]): WorkflowListItem[] {
   return [
     {
       key: "__create__",
@@ -40,7 +66,7 @@ function listRows(workflows: WorkflowDefinition[]): ListItem[] {
       workflow: null,
     },
     ...workflows.map((workflow) => ({
-      key: workflow.name,
+      key: workflow.location,
       name: workflow.name,
       description: workflow.description,
       workflow,
@@ -48,75 +74,145 @@ function listRows(workflows: WorkflowDefinition[]): ListItem[] {
   ];
 }
 
-function actionRows(): ActionItem[] {
+function skillRows(skills: SkillDefinition[]): SkillListItem[] {
+  return skills.map((skill) => ({
+    key: skill.location,
+    name: skill.name,
+    description: skill.description,
+    skill,
+  }));
+}
+
+function workflowActionRows(): WorkflowActionItem[] {
   return [
     { name: "use", description: "Inject workflow for model usage" },
     { name: "refine", description: "Refine workflow content" },
     { name: "append-to-agents", description: "Append workflow in AGENTS.md" },
-    { name: "promote-to-skill", description: "Move workflow to ./.pi/skills" },
+    { name: "promote-to-skill", description: "Move workflow to ~/.pi/agent/skills" },
     { name: "delete", description: "Delete workflow" },
   ];
 }
 
-function listCols(): Col<ListItem>[] {
+function skillActionRows(): SkillActionItem[] {
+  return [
+    { name: "use", description: "Inject skill for model usage" },
+    { name: "refine", description: "Refine skill content" },
+    { name: "delete", description: "Delete skill" },
+  ];
+}
+
+function listCols<T extends { name: string; description: string }>(): Col<T>[] {
   return [
     { show: true, width: 28, tone: "normal", align: "left", pick: (item) => item.name },
     { show: true, width: 44, tone: "dim", align: "left", pick: (item) => item.description },
   ];
 }
 
-function actionCols(): Col<ActionItem>[] {
+function workflowActionCols(): Col<WorkflowActionItem>[] {
   return [
     { show: true, width: 20, tone: "normal", align: "left", pick: (item) => item.name },
     { show: true, width: 52, tone: "dim", align: "left", pick: (item) => item.description },
   ];
 }
 
-function detailBody(workflow: WorkflowDefinition): string[] {
+function skillActionCols(): Col<SkillActionItem>[] {
+  return [
+    { show: true, width: 20, tone: "normal", align: "left", pick: (item) => item.name },
+    { show: true, width: 52, tone: "dim", align: "left", pick: (item) => item.description },
+  ];
+}
+
+function detailBody(location: string): string[] {
   try {
-    const content = fs.readFileSync(workflow.location, "utf-8");
+    const content = fs.readFileSync(location, "utf-8");
     const body = stripFrontmatter(content).trim();
-    if (!body) return ["_No workflow body yet._"];
+    if (!body) return ["_No body yet._"];
     return body.split(/\r?\n/);
   } catch {
-    return ["_Unable to read workflow file._"];
+    return ["_Unable to read file._"];
   }
 }
 
-function detailView(workflow: WorkflowDefinition) {
+function detailView(name: string, description: string, location: string) {
   return createDetail({
-    title: workflow.name,
-    meta: [workflow.description, workflow.location],
-    body: detailBody(workflow),
+    title: name,
+    meta: [description, location],
+    body: detailBody(location),
   });
 }
 
-function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[]): Promise<WorkflowPick> {
-  const rows = listRows(workflows);
-  const acts = actionRows();
-  const list = createList<ListItem>({
+function helpView() {
+  return createDetail({
+    title: "Workflows and skills help",
+    meta: ["Use one UI for repo workflows and global skills"],
+    body: [
+      "- Workflows: repository SOPs. Agents can document them as they work, and they can be appended to AGENTS.md.",
+      "- Skills: broader reusable capabilities. Prefer keeping them global under ~/.pi/agent/skills.",
+      "- To reduce command clutter, open /settings and set 'skill commands' to false.",
+      "- Use Tab / Shift+Tab to switch Workflows and Skills tabs.",
+      "- Use v to toggle detail preview and J/K to scroll preview.",
+      "- Use Esc to back out of actions, close preview, or close the menu.",
+    ],
+  });
+}
+
+function createPick(
+  ctx: ExtensionCommandContext,
+  workflows: WorkflowDefinition[],
+  skills: SkillDefinition[],
+  initial: Tab,
+): Promise<WorkflowPick> {
+  const workflowItems = workflowRows(workflows);
+  const skillItems = skillRows(skills);
+  const workflowList = createList<WorkflowListItem>({
     title: `Workflows (${workflows.length})`,
-    items: rows,
-    shortcuts: "/ search • j/k select • v details • enter confirm",
+    items: workflowItems,
+    shortcuts: "tab switch • / search • j/k select • v details • enter confirm",
     tier: "top",
-    tab: false,
+    tab: true,
     search: true,
     prompt: true,
     page: 9,
     find: (item, query) => item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
-    intent: (item) => ({ type: "action", name: `pick:${item.key}` }),
-    cols: listCols(),
+    intent: (item) => ({ type: "action", name: `workflow:${item.key}` }),
+    cols: listCols<WorkflowListItem>(),
+  });
+  const skillList = createList<SkillListItem>({
+    title: `Skills (${skills.length})`,
+    items: skillItems,
+    shortcuts: "tab switch • / search • j/k select • v details • enter confirm",
+    tier: "top",
+    tab: true,
+    search: true,
+    prompt: true,
+    page: 9,
+    find: (item, query) => item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
+    intent: (item) => ({ type: "action", name: `skill:${item.key}` }),
+    cols: listCols<SkillListItem>(),
   });
 
-  const action = createAction<ActionItem>(
+  const workflowActions = createAction<WorkflowActionItem>(
     {
       title: "Workflow actions",
-      items: acts,
+      items: workflowActionRows(),
       shortcuts: "j/k select • v toggle preview • J/K scroll preview • enter confirm",
       page: 9,
       find: (item, query) => item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
       intent: (item) => ({ type: "action", name: item.name }),
-      cols: actionCols(),
+      cols: workflowActionCols(),
+    },
+    "nested",
+  );
+
+  const skillActions = createAction<SkillActionItem>(
+    {
+      title: "Skill actions",
+      items: skillActionRows(),
+      shortcuts: "j/k select • v toggle preview • J/K scroll preview • enter confirm",
+      page: 9,
+      find: (item, query) => item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
+      intent: (item) => ({ type: "action", name: item.name }),
+      cols: skillActionCols(),
     },
     "nested",
   );
@@ -126,34 +222,78 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
       fg: (color: string, value: string) => theme.fg(color as never, value),
     };
     const state = {
-      screen: "list" as "list" | "actions",
-      prev: "list" as "list" | "actions",
-      query: "",
+      tab: initial,
+      screen: "list" as "list" | "actions" | "help",
       search: false,
+      query: "",
       detail: undefined as ReturnType<typeof createDetail> | undefined,
+      selectedWorkflow: undefined as WorkflowDefinition | undefined,
+      selectedSkill: undefined as SkillDefinition | undefined,
     };
 
-    const selected = (): ListItem | null => {
-      const intent = list.enter();
+    const list = () => (state.tab === "workflows" ? workflowList : skillList);
+
+    const pickWorkflow = (): WorkflowListItem | null => {
+      const intent = workflowList.enter();
       if (!intent || intent.type !== "action") return null;
-      if (!intent.name.startsWith("pick:")) return null;
-      const key = intent.name.slice(5);
-      const value = rows.find((item) => item.key === key);
+      const key = intent.name.startsWith("workflow:") ? intent.name.slice(9) : "";
+      if (!key) return null;
+      const value = workflowItems.find((item) => item.key === key);
+      return value ?? null;
+    };
+
+    const pickSkill = (): SkillListItem | null => {
+      const intent = skillList.enter();
+      if (!intent || intent.type !== "action") return null;
+      const key = intent.name.startsWith("skill:") ? intent.name.slice(6) : "";
+      if (!key) return null;
+      const value = skillItems.find((item) => item.key === key);
       return value ?? null;
     };
 
     const refreshDetail = (): void => {
-      const item = selected();
-      if (!item || !item.workflow) {
-        state.detail = undefined;
+      if (state.tab === "workflows") {
+        const picked = pickWorkflow();
+        if (!picked || !picked.workflow) {
+          state.detail = undefined;
+          state.selectedWorkflow = undefined;
+          return;
+        }
+        state.selectedWorkflow = picked.workflow;
+        state.detail = detailView(picked.workflow.name, picked.workflow.description, picked.workflow.location);
         return;
       }
-      state.detail = detailView(item.workflow);
+      const picked = pickSkill();
+      if (!picked) {
+        state.detail = undefined;
+        state.selectedSkill = undefined;
+        return;
+      }
+      state.selectedSkill = picked.skill;
+      state.detail = detailView(picked.skill.name, picked.skill.description, picked.skill.location);
+    };
+
+    const changeTab = (next: Tab): void => {
+      if (state.tab === next) return;
+      state.tab = next;
+      state.screen = "list";
+      state.search = false;
+      state.query = "";
+      state.detail = undefined;
+      workflowList.set("");
+      skillList.set("");
     };
 
     return {
       render: (width: number) => {
-        const slot = state.screen === "list" ? list.slot() : action.slot();
+        const slot =
+          state.screen === "help"
+            ? helpView().slot()
+            : state.screen === "list"
+              ? list().slot()
+              : state.tab === "workflows"
+                ? workflowActions.slot()
+                : skillActions.slot();
         const base = create(slot, skin).render(width);
         if (!state.detail) return base;
         const top = renderDetail(state.detail.slot(), width, base.length, skin);
@@ -165,7 +305,7 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
           if (esc(data)) {
             state.search = false;
             state.query = "";
-            list.set("");
+            list().set("");
             tui.requestRender();
             return;
           }
@@ -176,13 +316,13 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
           }
           if (back(data)) {
             state.query = state.query.slice(0, -1);
-            list.set(state.query);
+            list().set(state.query);
             tui.requestRender();
             return;
           }
           if (text(data)) {
             state.query += data;
-            list.set(state.query);
+            list().set(state.query);
             tui.requestRender();
           }
           return;
@@ -197,6 +337,12 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
         }
 
         if (esc(data)) {
+          if (state.screen === "help") {
+            state.screen = "list";
+            state.detail = undefined;
+            tui.requestRender();
+            return;
+          }
           if (state.screen === "actions") {
             state.screen = "list";
             state.detail = undefined;
@@ -212,11 +358,36 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
           return;
         }
 
+        if (state.screen === "list" && tab(data)) {
+          changeTab(state.tab === "workflows" ? "skills" : "workflows");
+          tui.requestRender();
+          return;
+        }
+
+        if (state.screen === "list" && backtab(data)) {
+          changeTab(state.tab === "workflows" ? "skills" : "workflows");
+          tui.requestRender();
+          return;
+        }
+
+        if (state.screen === "list" && (help(data) || about(data))) {
+          state.screen = "help";
+          state.search = false;
+          state.query = "";
+          state.detail = undefined;
+          tui.requestRender();
+          return;
+        }
+
         if (state.screen === "list" && slash(data)) {
           state.search = true;
           state.query = "";
-          list.set("");
+          list().set("");
           tui.requestRender();
+          return;
+        }
+
+        if (state.screen === "help") {
           return;
         }
 
@@ -232,30 +403,42 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
             return;
           }
           if (down(data)) {
-            list.down();
+            list().down();
             if (state.detail) refreshDetail();
             tui.requestRender();
             return;
           }
           if (up(data)) {
-            list.up();
+            list().up();
             if (state.detail) refreshDetail();
             tui.requestRender();
             return;
           }
           if (enter(data)) {
-            const item = selected();
-            if (!item) {
+            if (state.tab === "workflows") {
+              const picked = pickWorkflow();
+              if (!picked) {
+                done({ type: "cancel" });
+                return;
+              }
+              if (!picked.workflow) {
+                done({ type: "create" });
+                return;
+              }
+              state.selectedWorkflow = picked.workflow;
+              state.screen = "actions";
+              state.detail = detailView(picked.workflow.name, picked.workflow.description, picked.workflow.location);
+              tui.requestRender();
+              return;
+            }
+            const picked = pickSkill();
+            if (!picked) {
               done({ type: "cancel" });
               return;
             }
-            if (!item.workflow) {
-              done({ type: "create" });
-              return;
-            }
-            state.prev = "list";
+            state.selectedSkill = picked.skill;
             state.screen = "actions";
-            state.detail = detailView(item.workflow);
+            state.detail = detailView(picked.skill.name, picked.skill.description, picked.skill.location);
             tui.requestRender();
           }
           return;
@@ -273,57 +456,93 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
         }
 
         if (down(data)) {
-          action.down();
-          refreshDetail();
+          if (state.tab === "workflows") workflowActions.down();
+          if (state.tab === "skills") skillActions.down();
           tui.requestRender();
           return;
         }
 
         if (up(data)) {
-          action.up();
-          refreshDetail();
+          if (state.tab === "workflows") workflowActions.up();
+          if (state.tab === "skills") skillActions.up();
           tui.requestRender();
           return;
         }
 
         if (enter(data)) {
-          const chosen = selected();
-          if (!chosen || !chosen.workflow) {
+          if (state.tab === "workflows") {
+            const selected = state.selectedWorkflow;
+            if (!selected) {
+              done({ type: "cancel" });
+              return;
+            }
+            const intent = workflowActions.enter();
+            if (!intent || intent.type !== "action") {
+              done({ type: "cancel" });
+              return;
+            }
+            if (
+              intent.name !== "use" &&
+              intent.name !== "refine" &&
+              intent.name !== "append-to-agents" &&
+              intent.name !== "promote-to-skill" &&
+              intent.name !== "delete"
+            ) {
+              done({ type: "cancel" });
+              return;
+            }
+            done({ type: "workflow", action: intent.name, workflow: selected });
+            return;
+          }
+
+          const selected = state.selectedSkill;
+          if (!selected) {
             done({ type: "cancel" });
             return;
           }
-          const intent = action.enter();
+          const intent = skillActions.enter();
           if (!intent || intent.type !== "action") {
             done({ type: "cancel" });
             return;
           }
-          if (
-            intent.name !== "use" &&
-            intent.name !== "refine" &&
-            intent.name !== "append-to-agents" &&
-            intent.name !== "promote-to-skill" &&
-            intent.name !== "delete"
-          ) {
+          if (intent.name !== "use" && intent.name !== "refine" && intent.name !== "delete") {
             done({ type: "cancel" });
             return;
           }
-          done({ type: "action", action: intent.name, workflow: chosen.workflow });
+          done({ type: "skill", action: intent.name, skill: selected });
         }
       },
     };
   });
 }
 
-export async function openWorkflowsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
+async function openMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, initial: Tab): Promise<void> {
   while (true) {
-    const discovery = await discoverWorkflows(ctx.cwd);
-    const picked = await createPick(ctx, discovery.workflows);
+    const workflowDiscovery = await discoverWorkflows(ctx.cwd);
+    const skillDiscovery = await discoverSkills(ctx.cwd);
+    const picked = await createPick(ctx, workflowDiscovery.workflows, skillDiscovery.skills, initial);
     if (picked.type === "cancel") return;
     if (picked.type === "create") {
       const extra = await ctx.ui.input("Create workflow", "What should this workflow document?");
       const suffix = extra && extra.trim() ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>` : "";
       pi.sendUserMessage(`${WORKFLOW_CREATE_PROMPT}${suffix}`);
       return;
+    }
+    if (picked.type === "skill") {
+      if (picked.action === "use") {
+        const extra = (await ctx.ui.input("Use skill", "Optional instructions")) ?? "";
+        await injectSkillUse(pi, picked.skill, extra);
+        return;
+      }
+      if (picked.action === "refine") {
+        pi.sendUserMessage(refineSkillPrompt(picked.skill));
+        return;
+      }
+      const confirmed = await ctx.ui.confirm("Delete skill", `Delete skill '${picked.skill.name}'?`);
+      if (!confirmed) continue;
+      await deleteSkill(picked.skill);
+      ctx.ui.notify(`Skill '${picked.skill.name}' deleted`, "info");
+      continue;
     }
     if (picked.action === "use") {
       const extra = (await ctx.ui.input("Use workflow", "Optional instructions")) ?? "";
@@ -335,7 +554,7 @@ export async function openWorkflowsMenu(pi: ExtensionAPI, ctx: ExtensionCommandC
     if (picked.action === "promote-to-skill") {
       const confirmed = await ctx.ui.confirm(
         "Promote workflow",
-        `Promote ${picked.workflow.name} to ./.pi/skills and remove it from workflows?`,
+        `Promote ${picked.workflow.name} to ~/.pi/agent/skills and remove it from workflows?`,
       );
       if (!confirmed) continue;
       const target = await promoteWorkflow(ctx.cwd, picked.workflow);
@@ -347,4 +566,12 @@ export async function openWorkflowsMenu(pi: ExtensionAPI, ctx: ExtensionCommandC
     await deleteWorkflow(picked.workflow);
     ctx.ui.notify(`Workflow '${picked.workflow.name}' deleted`, "info");
   }
+}
+
+export async function openWorkflowsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
+  await openMenu(pi, ctx, "workflows");
+}
+
+export async function openSkillsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
+  await openMenu(pi, ctx, "skills");
 }

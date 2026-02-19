@@ -6,6 +6,12 @@ export type WorkflowDefinition = {
   location: string;
 };
 
+export type SkillDefinition = {
+  name: string;
+  description: string;
+  location: string;
+};
+
 export type WorkflowCreateInput = {
   name: string;
   description: string;
@@ -13,8 +19,10 @@ export type WorkflowCreateInput = {
 };
 
 export type WorkflowAction = "use" | "refine" | "append-to-agents" | "promote-to-skill" | "delete";
+export type SkillAction = "use" | "refine" | "delete";
 
 export type WorkflowPick =
   | { type: "cancel" }
   | { type: "create" }
-  | { type: "action"; action: WorkflowAction; workflow: WorkflowDefinition };
+  | { type: "workflow"; action: WorkflowAction; workflow: WorkflowDefinition }
+  | { type: "skill"; action: SkillAction; skill: SkillDefinition };

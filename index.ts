@@ -190,110 +190,174 @@ async function deleteWorkflow(workflow: WorkflowDefinition): Promise<void> {
   await fs.promises.rm(path.dirname(workflow.location), { recursive: true, force: true });
 }
 
-class WorkflowSelectorComponent extends Container {
+type WorkflowAction = "use" | "refine" | "append-to-agents" | "promote-to-skill" | "delete";
+type WorkflowPick =
+  | { type: "cancel" }
+  | { type: "create" }
+  | { type: "action"; action: WorkflowAction; workflow: WorkflowDefinition };
+
+class WorkflowMenuComponent extends Container {
+  private tui: { requestRender: () => void };
+  private theme: Theme;
+  private workflows: WorkflowDefinition[];
+  private header: Text;
+  private hint: Text;
+  private list: Container;
+  private search: Input;
   private select: SelectList;
+  private mode: "workflows" | "actions";
+  private current: WorkflowDefinition | null;
+  private done: (value: WorkflowPick) => void;
 
   constructor(
+    tui: { requestRender: () => void },
     theme: Theme,
     workflows: WorkflowDefinition[],
-    onSelect: (value: string) => void,
-    onCancel: () => void,
+    done: (value: WorkflowPick) => void,
   ) {
     super();
-    const items: SelectItem[] = [
-      { value: "__create__", label: "Create new workflow...", description: "Create a workflow manually" },
-      ...workflows.map((workflow) => ({
-        value: workflow.name,
-        label: workflow.name,
-        description: workflow.description,
-      })),
-    ];
-    this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg("accent", theme.bold(`Workflows (${workflows.length})`)), 1, 0));
-    this.addChild(new Spacer(1));
-    const search = new Input();
-    search.setValue("");
-    search.focused = false;
-    this.addChild(search);
-    this.addChild(new Spacer(1));
-    this.select = new SelectList(items, 9, {
-      selectedPrefix: (text) => theme.fg("accent", text),
-      selectedText: (text) => theme.fg("accent", text),
-      description: (text) => theme.fg("muted", text),
-      scrollInfo: (text) => theme.fg("dim", text),
-      noMatch: (text) => theme.fg("warning", text),
+    this.tui = tui;
+    this.theme = theme;
+    this.workflows = workflows;
+    this.mode = "workflows";
+    this.current = null;
+    this.done = done;
+    this.header = new Text("", 1, 0);
+    this.hint = new Text("", 1, 0);
+    this.list = new Container();
+    this.search = new Input();
+    this.search.setValue("");
+    this.search.focused = false;
+    this.select = new SelectList([], 9, {
+      selectedPrefix: (text) => this.theme.fg("accent", text),
+      selectedText: (text) => this.theme.fg("accent", text),
+      description: (text) => this.theme.fg("muted", text),
+      scrollInfo: (text) => this.theme.fg("dim", text),
+      noMatch: (text) => this.theme.fg("warning", text),
     });
-    this.select.onSelect = (item) => onSelect(item.value);
-    this.select.onCancel = onCancel;
-    this.addChild(this.select);
-    for (let index = items.length; index < 9; index += 1) {
-      this.addChild(new Text("⠀", 0, 0));
-    }
+    this.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
     this.addChild(new Spacer(1));
-    this.addChild(
-      new Text(
-        theme.fg(
-          "dim",
-          "Press / to search • ↑↓ or j/k select • Enter select • Esc close",
-        ),
-        1,
-        0,
-      ),
+    this.addChild(this.header);
+    this.addChild(new Spacer(1));
+    this.addChild(this.search);
+    this.addChild(new Spacer(1));
+    this.addChild(this.list);
+    this.addChild(new Spacer(1));
+    this.addChild(this.hint);
+    this.addChild(new Spacer(1));
+    this.addChild(new DynamicBorder((text: string) => this.theme.fg("accent", text)));
+    this.redraw();
+  }
+
+  private redraw(): void {
+    this.header.setText(
+      this.mode === "workflows"
+        ? this.theme.fg("accent", this.theme.bold(`Workflows (${this.workflows.length})`))
+        : this.theme.fg("accent", this.theme.bold(`Actions for \"${this.current?.name ?? ""}\"`)),
     );
-    this.addChild(new Spacer(1));
-    this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
-  }
-
-  handleInput(data: string): void {
-    if (data === "j") {
-      this.select.handleInput("\u001b[B");
-      return;
-    }
-    if (data === "k") {
-      this.select.handleInput("\u001b[A");
-      return;
-    }
-    this.select.handleInput(data);
-  }
-}
-
-async function pickWorkflow(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[]): Promise<string | null> {
-  return ctx.ui.custom<string | null>((_tui, theme, _keybindings, done) => {
-    return new WorkflowSelectorComponent(theme, workflows, (value) => done(value), () => done(null));
-  });
-}
-
-class WorkflowActionComponent extends Container {
-  private select: SelectList;
-
-  constructor(theme: Theme, workflow: WorkflowDefinition, onSelect: (value: string) => void, onCancel: () => void) {
-    super();
-    const items: SelectItem[] = [
-      { value: "use", label: "use", description: "Inject workflow body and optional user instructions" },
-      { value: "refine", label: "refine", description: "Refine workflow with XML + RFC quality mission" },
-      { value: "append-to-agents", label: "append-to-agents", description: "Append workflow to AGENTS.md safely" },
-      { value: "promote-to-skill", label: "promote-to-skill", description: "Move workflow into ./.pi/skills" },
-      { value: "delete", label: "delete", description: "Delete workflow" },
-      { value: "back", label: "back", description: "Return to workflows list" },
-    ];
-    this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
-    this.addChild(new Text(theme.fg("accent", theme.bold(`Actions for \"${workflow.name}\"`)), 1, 0));
-    this.select = new SelectList(items, 10, {
-      selectedPrefix: (text) => theme.fg("accent", text),
-      selectedText: (text) => theme.fg("accent", text),
-      description: (text) => theme.fg("muted", text),
-      scrollInfo: (text) => theme.fg("dim", text),
-      noMatch: (text) => theme.fg("warning", text),
+    this.hint.setText(
+      this.mode === "workflows"
+        ? this.theme.fg(
+            "dim",
+            "Press / to search • ↑↓ or j/k select • Enter view • Esc close",
+          )
+        : this.theme.fg("dim", "Enter confirm • Esc back • ↑↓ or j/k navigate"),
+    );
+    const items: SelectItem[] =
+      this.mode === "workflows"
+        ? [
+            {
+              value: "__create__",
+              label: "Create new workflow...",
+              description: "Create a workflow manually",
+            },
+            ...this.workflows.map((workflow) => ({
+              value: workflow.name,
+              label: workflow.name,
+              description: workflow.description,
+            })),
+          ]
+        : [
+            { value: "use", label: "use", description: "Inject workflow body and user instructions" },
+            { value: "refine", label: "refine", description: "Refine workflow with XML + RFC quality" },
+            {
+              value: "append-to-agents",
+              label: "append-to-agents",
+              description: "Append workflow to AGENTS.md safely",
+            },
+            {
+              value: "promote-to-skill",
+              label: "promote-to-skill",
+              description: "Move workflow into ./.pi/skills",
+            },
+            { value: "delete", label: "delete", description: "Delete workflow" },
+            { value: "back", label: "back", description: "Return to workflows list" },
+          ];
+    this.select = new SelectList(items, 9, {
+      selectedPrefix: (text) => this.theme.fg("accent", text),
+      selectedText: (text) => this.theme.fg("accent", text),
+      description: (text) => this.theme.fg("muted", text),
+      scrollInfo: (text) => this.theme.fg("dim", text),
+      noMatch: (text) => this.theme.fg("warning", text),
     });
-    this.select.onSelect = (item) => onSelect(item.value);
-    this.select.onCancel = onCancel;
-    this.addChild(this.select);
-    for (let index = items.length; index < 10; index += 1) {
-      this.addChild(new Text("⠀", 0, 0));
+    this.select.onSelect = (item) => this.confirm(item.value);
+    this.select.onCancel = () => this.cancel();
+    this.list.clear();
+    this.list.addChild(this.select);
+    for (let index = items.length; index < 9; index += 1) {
+      this.list.addChild(new Text("⠀", 0, 0));
     }
-    this.addChild(new Text(theme.fg("dim", "Enter select • Esc back • ↑/↓ or j/k navigate"), 1, 0));
-    this.addChild(new DynamicBorder((text: string) => theme.fg("accent", text)));
+    this.tui.requestRender();
+  }
+
+  private confirm(value: string): void {
+    if (this.mode === "workflows") {
+      if (value === "__create__") {
+        this.done({ type: "create" });
+        return;
+      }
+      const workflow = this.workflows.find((item) => item.name === value);
+      if (!workflow) {
+        this.done({ type: "cancel" });
+        return;
+      }
+      this.current = workflow;
+      this.mode = "actions";
+      this.redraw();
+      return;
+    }
+    if (value === "back") {
+      this.mode = "workflows";
+      this.current = null;
+      this.redraw();
+      return;
+    }
+    const workflow = this.current;
+    if (!workflow) {
+      this.done({ type: "cancel" });
+      return;
+    }
+    if (
+      value !== "use" &&
+      value !== "refine" &&
+      value !== "append-to-agents" &&
+      value !== "promote-to-skill" &&
+      value !== "delete"
+    ) {
+      this.done({ type: "cancel" });
+      return;
+    }
+    this.done({ type: "action", action: value, workflow });
+  }
+
+  private cancel(): void {
+    if (this.mode === "actions") {
+      this.mode = "workflows";
+      this.current = null;
+      this.redraw();
+      return;
+    }
+    this.done({ type: "cancel" });
   }
 
   handleInput(data: string): void {
@@ -309,12 +373,9 @@ class WorkflowActionComponent extends Container {
   }
 }
 
-async function pickWorkflowAction(
-  ctx: ExtensionCommandContext,
-  workflow: WorkflowDefinition,
-): Promise<string | null> {
-  return ctx.ui.custom<string | null>((_tui, theme, _keybindings, done) => {
-    return new WorkflowActionComponent(theme, workflow, (value) => done(value), () => done(null));
+async function pickWorkflow(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[]): Promise<WorkflowPick> {
+  return ctx.ui.custom<WorkflowPick>((tui, theme, _keybindings, done) => {
+    return new WorkflowMenuComponent(tui, theme, workflows, done);
   });
 }
 
@@ -336,60 +397,45 @@ async function createWorkflowFromUi(ctx: ExtensionCommandContext): Promise<void>
   ctx.ui.notify(`Workflow created at ${workflow.location}`, "info");
 }
 
-async function openWorkflowActions(
-  pi: ExtensionAPI,
-  ctx: ExtensionCommandContext,
-  workflow: WorkflowDefinition,
-): Promise<"refresh" | "back" | "done"> {
-  const action = await pickWorkflowAction(ctx, workflow);
-  if (!action || action === "back") return "back";
-  if (action === "use") {
-    const extra = (await ctx.ui.input("Use workflow", "Optional instructions")) ?? "";
-    await injectWorkflowUse(pi, workflow, extra);
-    return "done";
-  }
-  if (action === "refine") {
-    pi.sendUserMessage(refineWorkflowPrompt(workflow));
-    return "done";
-  }
-  if (action === "append-to-agents") {
-    pi.sendUserMessage(appendWorkflowAgentsPrompt(workflow));
-    return "done";
-  }
-  if (action === "promote-to-skill") {
-    const confirmed = await ctx.ui.confirm(
-      "Promote workflow",
-      `Promote ${workflow.name} to ./.pi/skills and remove it from workflows?`,
-    );
-    if (!confirmed) return "back";
-    const target = await promoteWorkflow(ctx.cwd, workflow);
-    ctx.ui.notify(`Workflow promoted to ${target}`, "info");
-    return "refresh";
-  }
-  const confirmed = await ctx.ui.confirm("Delete workflow", `Delete workflow '${workflow.name}'?`);
-  if (!confirmed) return "back";
-  await deleteWorkflow(workflow);
-  ctx.ui.notify(`Workflow '${workflow.name}' deleted`, "info");
-  return "refresh";
-}
-
 async function openWorkflowsMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> {
   while (true) {
     const discovery = await discoverWorkflows(ctx.cwd);
-    const selected = await pickWorkflow(ctx, discovery.workflows);
-    if (!selected) return;
-    if (selected === "__create__") {
+    const picked = await pickWorkflow(ctx, discovery.workflows);
+    if (picked.type === "cancel") return;
+    if (picked.type === "create") {
       await createWorkflowFromUi(ctx);
       continue;
     }
-    const workflow = discovery.workflows.find((item) => item.name === selected);
-    if (!workflow) {
-      ctx.ui.notify("Workflow not found after refresh", "error");
+    if (picked.action === "use") {
+      const extra = (await ctx.ui.input("Use workflow", "Optional instructions")) ?? "";
+      await injectWorkflowUse(pi, picked.workflow, extra);
+      return;
+    }
+    if (picked.action === "refine") {
+      pi.sendUserMessage(refineWorkflowPrompt(picked.workflow));
+      return;
+    }
+    if (picked.action === "append-to-agents") {
+      pi.sendUserMessage(appendWorkflowAgentsPrompt(picked.workflow));
+      return;
+    }
+    if (picked.action === "promote-to-skill") {
+      const confirmed = await ctx.ui.confirm(
+        "Promote workflow",
+        `Promote ${picked.workflow.name} to ./.pi/skills and remove it from workflows?`,
+      );
+      if (!confirmed) continue;
+      const target = await promoteWorkflow(ctx.cwd, picked.workflow);
+      ctx.ui.notify(`Workflow promoted to ${target}`, "info");
       continue;
     }
-    const result = await openWorkflowActions(pi, ctx, workflow);
-    if (result === "refresh") continue;
-    if (result === "done") return;
+    const confirmed = await ctx.ui.confirm(
+      "Delete workflow",
+      `Delete workflow '${picked.workflow.name}'?`,
+    );
+    if (!confirmed) continue;
+    await deleteWorkflow(picked.workflow);
+    ctx.ui.notify(`Workflow '${picked.workflow.name}' deleted`, "info");
   }
 }
 

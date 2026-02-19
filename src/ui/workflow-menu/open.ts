@@ -97,7 +97,7 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
   const list = createList<ListItem>({
     title: `Workflows (${workflows.length})`,
     items: rows,
-    shortcuts: "ctrl+x more options • / search • j/k select • enter confirm • esc close",
+    shortcuts: "/ search • j/k select • v details • enter confirm",
     tier: "top",
     tab: false,
     search: true,
@@ -112,7 +112,7 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
     {
       title: "Workflow actions",
       items: acts,
-      shortcuts: "j/k select • v toggle preview • J/K scroll preview • enter confirm • esc back",
+      shortcuts: "j/k select • v toggle preview • J/K scroll preview • enter confirm",
       page: 9,
       find: (item, query) => item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
       intent: (item) => ({ type: "action", name: item.name }),
@@ -155,7 +155,7 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
       render: (width: number) => {
         const slot = state.screen === "list" ? list.slot() : action.slot();
         const base = create(slot, skin).render(width);
-        if (!state.detail || state.screen !== "actions") return base;
+        if (!state.detail) return base;
         const top = renderDetail(state.detail.slot(), width, base.length, skin);
         return [...top, "", ...base];
       },
@@ -203,6 +203,11 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
             tui.requestRender();
             return;
           }
+          if (state.detail) {
+            state.detail = undefined;
+            tui.requestRender();
+            return;
+          }
           done({ type: "cancel" });
           return;
         }
@@ -216,13 +221,25 @@ function createPick(ctx: ExtensionCommandContext, workflows: WorkflowDefinition[
         }
 
         if (state.screen === "list") {
+          if (detailToggle(data)) {
+            if (state.detail) {
+              state.detail = undefined;
+              tui.requestRender();
+              return;
+            }
+            refreshDetail();
+            tui.requestRender();
+            return;
+          }
           if (down(data)) {
             list.down();
+            if (state.detail) refreshDetail();
             tui.requestRender();
             return;
           }
           if (up(data)) {
             list.up();
+            if (state.detail) refreshDetail();
             tui.requestRender();
             return;
           }

@@ -1,1 +1,1 @@
-export { WorkflowMenuComponent, openWorkflowsMenu } from "./workflow-menu/index.js";
+export { openWorkflowsMenu } from "./workflow-menu/index.js";

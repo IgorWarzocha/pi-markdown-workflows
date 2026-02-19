@@ -1,5 +1,5 @@
 import { truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
-import type { Slot, Tone } from "./template";
+import type { Slot, Tone } from "./template.js";
 
 type Theme = {
 	fg: (color: string, text: string) => string;

@@ -1,5 +1,5 @@
-import type { Primitive } from "./primitive";
-import { row, type Slot } from "./template";
+import type { Primitive } from "./primitive.js";
+import { row, type Slot } from "./template.js";
 
 // Detail opts accept metadata, optional command block, and markdown-like body rows.
 type Opts = {

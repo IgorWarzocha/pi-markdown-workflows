@@ -1,5 +1,5 @@
-import { createList, type Col, type List } from "./list";
-import type { Intent } from "./intent";
+import { createList, type Col, type List } from "./list.js";
+import type { Intent } from "./intent.js";
 
 // Flow config controls how many columns a list-style action view SHOULD render.
 type Flow = {

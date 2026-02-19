@@ -1,4 +1,4 @@
-import { view } from "./keybinds";
+import { view } from "./keybinds.js";
 
 // detailToggle defines the default key that SHOULD open/close the detail panel.
 export function detailToggle(data: string): boolean {

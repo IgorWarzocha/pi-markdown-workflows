@@ -1,5 +1,5 @@
-import type { Intent } from "./intent";
-import type { Slot } from "./template";
+import type { Intent } from "./intent.js";
+import type { Slot } from "./template.js";
 
 // Primitive is the minimal interaction surface every SDK screen MUST implement.
 export type Primitive = {

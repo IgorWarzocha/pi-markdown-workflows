@@ -1,6 +1,6 @@
-import type { Intent } from "./intent";
-import type { Line, Slot, Tier, Tone } from "./template";
-import { row } from "./template";
+import type { Intent } from "./intent.js";
+import type { Line, Slot, Tier, Tone } from "./template.js";
+import { row } from "./template.js";
 
 type Align = "left" | "right";
 

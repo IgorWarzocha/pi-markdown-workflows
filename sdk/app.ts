@@ -1,9 +1,9 @@
-import { detailScroll, detailToggle } from "./keybind-logic";
-import { about, back, backtab, down, enter, esc, exit, help, leader, slash, tab, text, up } from "./keybinds";
-import type { Intent } from "./intent";
-import type { Primitive } from "./primitive";
-import { renderDetail } from "./detail-frame";
-import { create } from "./template";
+import { detailScroll, detailToggle } from "./keybind-logic.js";
+import { about, back, backtab, down, enter, esc, exit, help, leader, slash, tab, text, up } from "./keybinds.js";
+import type { Intent } from "./intent.js";
+import type { Primitive } from "./primitive.js";
+import { renderDetail } from "./detail-frame.js";
+import { create } from "./template.js";
 
 export type Theme = {
 	fg: (color: string, text: string) => string;

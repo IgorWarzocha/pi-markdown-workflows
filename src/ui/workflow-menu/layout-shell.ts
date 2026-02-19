@@ -1,11 +1,16 @@
 import { DynamicBorder } from "@mariozechner/pi-coding-agent";
-import { Spacer } from "@mariozechner/pi-tui";
+import { Spacer, Text } from "@mariozechner/pi-tui";
 
 import type { WorkflowMenuComponent } from "./component.js";
 
 export function layoutShell(menu: WorkflowMenuComponent): void {
   menu.clear();
   if (menu.mode === "actions") {
+    menu.addChild(new Text("", 0, 0));
+    menu.addChild(new Spacer(1));
+    menu.addChild(new Text("", 1, 0));
+    menu.addChild(new Spacer(1));
+    menu.addChild(new Text("", 1, 0));
     menu.addChild(new Spacer(1));
     menu.addChild(menu.list);
     menu.addChild(new Spacer(1));

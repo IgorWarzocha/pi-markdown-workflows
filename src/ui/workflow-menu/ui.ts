@@ -7,18 +7,12 @@ export function clearLeader(menu: WorkflowMenuComponent): void {
   if (menu.leaderTimer) clearTimeout(menu.leaderTimer);
   menu.leaderTimer = null;
   menu.leaderActive = false;
-  if (menu.mode === "actions" && menu.action) {
-    menu.action.setFooter("Enter confirm • Esc close • v toggle preview • J/K scroll preview • Ctrl+X more options");
-  }
   redraw(menu);
 }
 
 export function startLeader(menu: WorkflowMenuComponent): void {
   if (menu.leaderActive) return clearLeader(menu);
   menu.leaderActive = true;
-  if (menu.mode === "actions" && menu.action) {
-    menu.action.setFooter("More options: u use • r refine • a append • p promote • d delete", "warning");
-  }
   if (menu.leaderTimer) clearTimeout(menu.leaderTimer);
   menu.leaderTimer = setTimeout(() => clearLeader(menu), 2000);
   redraw(menu);
@@ -108,10 +102,8 @@ export function redraw(menu: WorkflowMenuComponent): void {
   if (menu.mode === "actions") menu.search.setValue("");
   menu.searchWrap.clear();
   menu.hintWrap.clear();
-  if (menu.mode === "workflows") {
-    menu.searchWrap.addChild(menu.search);
-    menu.hintWrap.addChild(menu.hint);
-  }
+  if (menu.mode === "workflows") menu.searchWrap.addChild(menu.search);
+  menu.hintWrap.addChild(menu.hint);
   if (menu.mode === "actions" && menu.current) {
     layoutActions(menu, (value) => confirm(menu, value), () => cancel(menu), () => layout(menu));
     return;

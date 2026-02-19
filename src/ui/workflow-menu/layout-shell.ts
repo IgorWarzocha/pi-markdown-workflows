@@ -6,7 +6,12 @@ import type { WorkflowMenuComponent } from "./component.js";
 export function layoutShell(menu: WorkflowMenuComponent): void {
   menu.clear();
   if (menu.mode === "actions") {
+    menu.addChild(new Spacer(1));
     menu.addChild(menu.list);
+    menu.addChild(new Spacer(1));
+    menu.addChild(menu.hintWrap);
+    menu.addChild(new Spacer(1));
+    menu.addChild(new DynamicBorder((text: string) => menu.theme.fg("accent", text)));
     return;
   }
   menu.addChild(new DynamicBorder((text: string) => menu.theme.fg("accent", text)));

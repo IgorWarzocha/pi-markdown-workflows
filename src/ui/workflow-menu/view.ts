@@ -1,29 +1,7 @@
-import { DynamicBorder, type Theme } from "@mariozechner/pi-coding-agent";
-import { SelectList, Spacer, Text, type SelectItem } from "@mariozechner/pi-tui";
-
-import { workflowRefs } from "../../core/workflow.js";
-import { WorkflowActionPanel, WorkflowDetailPanel } from "../workflow-panels.js";
 import type { WorkflowMenuComponent } from "./component.js";
-
-function items(menu: WorkflowMenuComponent): SelectItem[] {
-  if (menu.mode === "workflows") {
-    return [
-      { value: "__create__", label: "Create new workflow...", description: "Create a workflow manually" },
-      ...menu.workflows.map((workflow) => ({
-        value: workflow.name,
-        label: workflow.name,
-        description: workflow.description,
-      })),
-    ];
-  }
-  return [
-    { value: "use", label: "use", description: "Inject workflow body and user instructions" },
-    { value: "refine", label: "refine", description: "Refine workflow with XML + RFC quality" },
-    { value: "append-to-agents", label: "append-to-agents", description: "Append workflow to AGENTS.md safely" },
-    { value: "promote-to-skill", label: "promote-to-skill", description: "Move workflow into ./.pi/skills" },
-    { value: "delete", label: "delete", description: "Delete workflow" },
-  ];
-}
+import { layoutShell } from "./layout-shell.js";
+import { layoutWorkflows } from "./layout-workflows.js";
+import { layoutActions } from "./layout-actions.js";
 
 export function clearLeader(menu: WorkflowMenuComponent): void {
   if (menu.leaderTimer) clearTimeout(menu.leaderTimer);
@@ -134,58 +112,13 @@ export function redraw(menu: WorkflowMenuComponent): void {
     menu.searchWrap.addChild(menu.search);
     menu.hintWrap.addChild(menu.hint);
   }
-  const list = items(menu);
-  menu.select = new SelectList(list, 9, {
-    selectedPrefix: (text) => menu.theme.fg("accent", text),
-    selectedText: (text) => menu.theme.fg("accent", text),
-    description: (text) => menu.theme.fg("muted", text),
-    scrollInfo: (text) => menu.theme.fg("dim", text),
-    noMatch: (text) => menu.theme.fg("warning", text),
-  });
-  menu.select.onSelectionChange = (item) => {
-    menu.selected = item.value;
-  };
-  menu.select.onSelect = (item) => confirm(menu, item.value);
-  menu.select.onCancel = () => cancel(menu);
-  if (menu.mode === "workflows") menu.select.setFilter(menu.search.getValue());
-  menu.list.clear();
-  menu.action = null;
-  menu.detail = null;
   if (menu.mode === "actions" && menu.current) {
-    const refs = workflowRefs(menu.cwd, menu.current);
-    menu.detail = new WorkflowDetailPanel(menu.theme as Theme, {
-      name: menu.current.name,
-      description: menu.current.description,
-      references: refs,
-      location: menu.current.location,
-    });
-    menu.action = new WorkflowActionPanel(menu.theme as Theme, menu.current.name, (value) => confirm(menu, value), () => cancel(menu));
-    if (menu.leaderActive) menu.action.setFooter("More options: u use • r refine • a append • p promote • d delete", "warning");
-    if (menu.preview) menu.list.addChild(menu.detail);
-    menu.list.addChild(menu.action);
-    layout(menu);
-    menu.tui.requestRender();
+    layoutActions(menu, (value) => confirm(menu, value), () => cancel(menu), () => layout(menu));
     return;
   }
-  menu.list.addChild(menu.select);
-  for (let index = list.length; index < 9; index += 1) menu.list.addChild(new Text("⠀", 0, 0));
-  layout(menu);
-  menu.tui.requestRender();
+  layoutWorkflows(menu, (value) => confirm(menu, value), () => cancel(menu), () => layout(menu));
 }
 
 export function layout(menu: WorkflowMenuComponent): void {
-  menu.clear();
-  menu.addChild(new DynamicBorder((text: string) => menu.theme.fg("accent", text)));
-  menu.addChild(new Spacer(1));
-  menu.addChild(menu.header);
-  menu.addChild(new Spacer(1));
-  menu.addChild(menu.searchWrap);
-  menu.addChild(new Spacer(1));
-  menu.addChild(menu.list);
-  if (menu.mode === "workflows") {
-    menu.addChild(new Spacer(1));
-    menu.addChild(menu.hintWrap);
-    menu.addChild(new Spacer(1));
-  }
-  menu.addChild(new DynamicBorder((text: string) => menu.theme.fg("accent", text)));
+  layoutShell(menu);
 }

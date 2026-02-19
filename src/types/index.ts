@@ -23,6 +23,7 @@ export type SkillAction = "use" | "refine" | "delete";
 
 export type WorkflowPick =
   | { type: "cancel" }
-  | { type: "create" }
+  | { type: "create-workflow" }
+  | { type: "create-skill" }
   | { type: "workflow"; action: WorkflowAction; workflow: WorkflowDefinition }
   | { type: "skill"; action: SkillAction; skill: SkillDefinition };

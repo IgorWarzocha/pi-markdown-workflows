@@ -11,6 +11,7 @@ import { about, back, backtab, down, enter, esc, help, slash, tab, text, up } fr
 import { renderDetail } from "../../../sdk/detail-frame.js";
 import { deleteSkill, discoverSkills, injectSkillUse } from "../../core/skill.js";
 import {
+  SKILL_CREATE_PROMPT,
   WORKFLOW_CREATE_PROMPT,
   appendWorkflowAgentsPrompt,
   refineSkillPrompt,
@@ -44,7 +45,7 @@ type SkillListItem = {
   key: string;
   name: string;
   description: string;
-  skill: SkillDefinition;
+  skill: SkillDefinition | null;
 };
 
 type WorkflowActionItem = {
@@ -75,12 +76,20 @@ function workflowRows(workflows: WorkflowDefinition[]): WorkflowListItem[] {
 }
 
 function skillRows(skills: SkillDefinition[]): SkillListItem[] {
-  return skills.map((skill) => ({
-    key: skill.location,
-    name: skill.name,
-    description: skill.description,
-    skill,
-  }));
+  return [
+    {
+      key: "__create__",
+      name: "create",
+      description: "Create a reusable skill",
+      skill: null,
+    },
+    ...skills.map((skill) => ({
+      key: skill.location,
+      name: skill.name,
+      description: skill.description,
+      skill,
+    })),
+  ];
 }
 
 function workflowActionRows(): WorkflowActionItem[] {
@@ -264,7 +273,7 @@ function createPick(
         return;
       }
       const picked = pickSkill();
-      if (!picked) {
+      if (!picked || !picked.skill) {
         state.detail = undefined;
         state.selectedSkill = undefined;
         return;
@@ -422,7 +431,7 @@ function createPick(
                 return;
               }
               if (!picked.workflow) {
-                done({ type: "create" });
+                done({ type: "create-workflow" });
                 return;
               }
               state.selectedWorkflow = picked.workflow;
@@ -434,6 +443,10 @@ function createPick(
             const picked = pickSkill();
             if (!picked) {
               done({ type: "cancel" });
+              return;
+            }
+            if (!picked.skill) {
+              done({ type: "create-skill" });
               return;
             }
             state.selectedSkill = picked.skill;
@@ -522,10 +535,16 @@ async function openMenu(pi: ExtensionAPI, ctx: ExtensionCommandContext, initial:
     const skillDiscovery = await discoverSkills(ctx.cwd);
     const picked = await createPick(ctx, workflowDiscovery.workflows, skillDiscovery.skills, initial);
     if (picked.type === "cancel") return;
-    if (picked.type === "create") {
+    if (picked.type === "create-workflow") {
       const extra = await ctx.ui.input("Create workflow", "What should this workflow document?");
       const suffix = extra && extra.trim() ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>` : "";
       pi.sendUserMessage(`${WORKFLOW_CREATE_PROMPT}${suffix}`);
+      return;
+    }
+    if (picked.type === "create-skill") {
+      const extra = await ctx.ui.input("Create skill", "What should this skill enable?");
+      const suffix = extra && extra.trim() ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>` : "";
+      pi.sendUserMessage(`${SKILL_CREATE_PROMPT}${suffix}`);
       return;
     }
     if (picked.type === "skill") {

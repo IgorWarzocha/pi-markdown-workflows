@@ -26,6 +26,7 @@ export function formatWorkflowsForPrompt(workflows: WorkflowDefinition[], cwd: s
     "\n\n<workflows>",
     "The following workflows are reusable SOP-style procedures for established tasks.",
     "You MUST use the read tool to load a workflow file when the task matches its description.",
+    "You SHOULD treat workflows as agent-owned procedures and refine them when execution reveals gaps or failures.",
     "Workflow files are located under <workflows_root>./.pi/workflows/</workflows_root>.",
     "You MAY list this directory to discover available workflow files.",
     "</workflows>",

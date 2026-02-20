@@ -1,1 +1,1 @@
-export { openWorkflowsMenu } from "./open.js";
+export { openSkillsMenu, openWorkflowsMenu } from "./open.js";

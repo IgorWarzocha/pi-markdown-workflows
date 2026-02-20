@@ -8,7 +8,9 @@ import { normalizeAtPrefix } from "./workflow.js";
 
 function resolvePath(targetPath: string, baseDir: string): string {
   const cleaned = normalizeAtPrefix(targetPath);
-  const absolute = path.isAbsolute(cleaned) ? path.normalize(cleaned) : path.resolve(baseDir, cleaned);
+  const absolute = path.isAbsolute(cleaned)
+    ? path.normalize(cleaned)
+    : path.resolve(baseDir, cleaned);
   try {
     return fs.realpathSync.native?.(absolute) ?? fs.realpathSync(absolute);
   } catch {
@@ -107,7 +109,8 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     if (!isRead && !isBash) return undefined;
     const pathInput = event.input.path as string | undefined;
     const bashInput = event.input.command as string | undefined;
-    const isDiscoveryBash = isBash && typeof bashInput === "string" && isDiscoveryBashCommand(bashInput);
+    const isDiscoveryBash =
+      isBash && typeof bashInput === "string" && isDiscoveryBashCommand(bashInput);
     if (!isRead && !isDiscoveryBash) return undefined;
     if (!currentCwd) resetSession(ctx.cwd);
 
@@ -124,13 +127,20 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
 
     const paths = new Set<string>();
     for (const target of targets) {
-      const searchRoot = isInsideRoot(currentCwd, target) ? currentCwd : isInsideRoot(homeDir, target) ? homeDir : "";
+      const searchRoot = isInsideRoot(currentCwd, target)
+        ? currentCwd
+        : isInsideRoot(homeDir, target)
+          ? homeDir
+          : "";
       if (!searchRoot) continue;
       if (path.basename(target) === "AGENTS.md") {
         loadedAgents.add(path.normalize(target));
         continue;
       }
-      const probe = fs.existsSync(target) && fs.statSync(target).isDirectory() ? path.join(target, "__probe__") : target;
+      const probe =
+        fs.existsSync(target) && fs.statSync(target).isDirectory()
+          ? path.join(target, "__probe__")
+          : target;
       const files = findAgentsFiles(probe, searchRoot);
       for (const file of files) paths.add(file);
     }

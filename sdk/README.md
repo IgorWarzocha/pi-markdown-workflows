@@ -15,7 +15,7 @@ Reusable TUI primitives for Pi extensions.
 
 ## Minimal usage
 
-1. Build screen sources in your extension `src/` (or `sdk/example/src/`) using SDK primitives.
+1. Build screen sources in your extension `src/` using SDK primitives.
 2. Build a screen registry (`Record<Screen, Primitive>`).
 3. Build a detail registry (`Record<string, Primitive>`).
 4. Define tab cycle order (`Screen[]`).
@@ -36,22 +36,3 @@ Reusable TUI primitives for Pi extensions.
 - `list.ts`: row/flow list behavior, search, wraparound.
 - `action.ts`: action list preset.
 - `detail.ts`: scrollable read view with optional `block` section.
-
-## Example extension
-
-- Location: `sdk/example/`
-- Entry: `sdk/example/index.ts`
-- SDK imports in examples SHOULD come from `..` / `../..` (the `sdk/index.ts` barrel), not deep file paths.
-
-Included demo screens:
-
-- Basic list preview (`list`)
-- Secondary list variant (`list2`)
-- Compact flow variant (`variant-compact`)
-- Tri-column flow variant (`variant-tri`)
-- Standard actions menu (`actions`)
-- Wide actions menu (`actions-wide`)
-- Actions with detail targets (`actions-detail`)
-- Nested actions screen (`actions-nested`)
-- Static help/about screens
-- Detail views from markdown sources (`todo`, `skill`)

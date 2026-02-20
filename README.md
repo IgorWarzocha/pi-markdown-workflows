@@ -4,6 +4,8 @@
 
 Pi extension for building, refining, and using **workflows** (repo SOPs) and **skills** (global capabilities) from one unified GUI.
 
+<img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/a9124b44-eb29-4159-83fa-27df40c8825a" />
+
 ## Key features
 
 ### Unified GUI for workflows and skills

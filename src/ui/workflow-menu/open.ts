@@ -84,8 +84,13 @@ async function openMenu(
         `Promote ${picked.workflow.name} to ~/.pi/agent/skills and remove it from workflows?`,
       );
       if (!confirmed) continue;
-      const target = await promoteWorkflow(ctx.cwd, picked.workflow);
-      ctx.ui.notify(`Workflow promoted to ${target}`, "info");
+      try {
+        const target = await promoteWorkflow(ctx.cwd, picked.workflow);
+        ctx.ui.notify(`Workflow promoted to ${target}`, "info");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(message, "warning");
+      }
       continue;
     }
     const confirmed = await ctx.ui.confirm(

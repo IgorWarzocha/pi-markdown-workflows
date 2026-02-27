@@ -44,6 +44,9 @@ export async function promoteWorkflow(cwd: string, workflow: WorkflowDefinition)
   const slug = slugify(workflow.name) || "workflow";
   const skillDir = path.join(os.homedir(), ".pi", "agent", "skills", slug);
   const target = path.join(skillDir, PRIMARY_WORKFLOW_FILE);
+  if (fs.existsSync(target)) {
+    throw new Error(`Cannot promote workflow: skill already exists at ${target}`);
+  }
   await fs.promises.mkdir(skillDir, { recursive: true });
   const content = await fs.promises.readFile(workflow.location, "utf-8");
   await fs.promises.writeFile(target, content, "utf-8");

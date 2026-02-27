@@ -24,10 +24,7 @@ function stripQuotes(value: string): string {
 }
 
 function normalizePlainText(value: string): string {
-  return value
-    .replace(/^[>|][+-]?\d*\s*/, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function isBlockScalar(value: string): boolean {

@@ -7,6 +7,10 @@ import { parseSkillFrontmatter, PRIMARY_SKILL_FILE, PRIMARY_SKILLS_PROJECT_DIR }
 
 type SkillSource = { root: string; type: "dir" | "file" };
 
+function isSkillFilePath(value: string): boolean {
+  return path.basename(value).toLowerCase() === PRIMARY_SKILL_FILE.toLowerCase();
+}
+
 function resolvePaths(values: string[], base: string): string[] {
   const items: string[] = [];
   for (const value of values) {
@@ -41,8 +45,13 @@ function sources(cwd: string): SkillSource[] {
     ...readSettingsSkills(globalSettings, path.join(os.homedir(), ".pi", "agent")),
   ];
   for (const item of extra) {
-    const type = item.toLowerCase().endsWith(".md") ? "file" : "dir";
-    list.push({ root: item, type });
+    const normalized = path.normalize(item);
+    if (isSkillFilePath(normalized)) {
+      list.push({ root: normalized, type: "file" });
+      continue;
+    }
+    if (normalized.toLowerCase().endsWith(".md")) continue;
+    list.push({ root: normalized, type: "dir" });
   }
   return list;
 }
@@ -57,21 +66,17 @@ function collectDirSkillFiles(root: string): string[] {
   const files: string[] = [];
   for (const entry of entries) {
     const full = path.join(root, entry.name);
-    if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) files.push(full);
-    if (entry.isDirectory()) {
-      const skill = path.join(full, PRIMARY_SKILL_FILE);
-      if (fs.existsSync(skill)) files.push(skill);
-      const nested = collectDirSkillFiles(full);
-      for (const item of nested) {
-        if (path.basename(item) !== PRIMARY_SKILL_FILE) continue;
-        files.push(item);
-      }
+    if (entry.isFile() && isSkillFilePath(entry.name)) {
+      files.push(full);
+      continue;
     }
+    if (entry.isDirectory()) files.push(...collectDirSkillFiles(full));
   }
   return files;
 }
 
 function readSkill(file: string): SkillDefinition | null {
+  if (!isSkillFilePath(file)) return null;
   try {
     const content = fs.readFileSync(file, "utf-8");
     const meta = parseSkillFrontmatter(content);

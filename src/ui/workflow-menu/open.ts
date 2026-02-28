@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionCommandContext } from "@mariozechner/pi-coding-agent";
+import { runComposer } from "@howaboua/pi-howaboua-extensions-primitives-sdk";
 
 import { deleteSkill, discoverSkills, injectSkillUse } from "../../core/skill.js";
 import {
@@ -17,6 +18,22 @@ import {
 import { createPick } from "./pick.js";
 import type { Tab } from "./view.js";
 
+async function composeInput(
+  ctx: ExtensionCommandContext,
+  title: string,
+  placeholder: string,
+): Promise<string> {
+  const composerCtx = ctx as unknown as Parameters<typeof runComposer>[0];
+  const value = await runComposer(composerCtx, {
+    title,
+    placeholder,
+    maxLines: 120,
+    maxLength: 12000,
+    shortcuts: "enter submit • shift+enter newline • esc cancel",
+  });
+  return value ?? "";
+}
+
 async function openMenu(
   pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
@@ -33,7 +50,7 @@ async function openMenu(
     );
     if (picked.type === "cancel") return;
     if (picked.type === "create-workflow") {
-      const extra = await ctx.ui.input("Create workflow", "What should this workflow document?");
+      const extra = await composeInput(ctx, "Create workflow", "What should this workflow document?");
       const suffix =
         extra && extra.trim()
           ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>`
@@ -42,7 +59,7 @@ async function openMenu(
       return;
     }
     if (picked.type === "create-skill") {
-      const extra = await ctx.ui.input("Create skill", "What should this skill enable?");
+      const extra = await composeInput(ctx, "Create skill", "What should this skill enable?");
       const suffix =
         extra && extra.trim()
           ? `\n\n<user_instructions>\n${extra.trim()}\n</user_instructions>`
@@ -52,7 +69,7 @@ async function openMenu(
     }
     if (picked.type === "skill") {
       if (picked.action === "use") {
-        const extra = (await ctx.ui.input("Use skill", "Optional instructions")) ?? "";
+        const extra = await composeInput(ctx, "Use skill", "Optional instructions");
         await injectSkillUse(pi, picked.skill, extra);
         return;
       }
@@ -70,7 +87,7 @@ async function openMenu(
       continue;
     }
     if (picked.action === "use") {
-      const extra = (await ctx.ui.input("Use workflow", "Optional instructions")) ?? "";
+      const extra = await composeInput(ctx, "Use workflow", "Optional instructions");
       await injectWorkflowUse(pi, picked.workflow, extra);
       return;
     }

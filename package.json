@@ -23,15 +23,18 @@
     "build": "tsc",
     "check": "tsc --noEmit",
     "clean": "rm -rf dist",
+    "lint": "oxfmt --check index.ts src/**/*.ts",
+    "format": "oxfmt index.ts src/**/*.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@howaboua/pi-howaboua-extensions-primitives-sdk": "^0.0.1",
+    "@howaboua/pi-howaboua-extensions-primitives-sdk": "^0.3.0",
     "@sinclair/typebox": "^0.34.41"
   },
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "*",
     "@types/node": "^24.3.0",
+    "oxfmt": "^0.35.0",
     "typescript": "^5.9.3"
   },
   "peerDependencies": {

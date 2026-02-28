@@ -5,6 +5,8 @@ import path from "node:path";
 
 import extension from "../dist/index.js";
 
+const DETAILS_KEY = "subdirContextAutoload";
+
 function mockPi() {
   const handlers = new Map();
   return {
@@ -18,6 +20,11 @@ function mockPi() {
   };
 }
 
+function persistedFiles(details) {
+  const value = details?.[DETAILS_KEY]?.files;
+  return Array.isArray(value) ? value : [];
+}
+
 async function run() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "pi-workflows-tool-test-"));
   const cwd = path.join(root, "repo");
@@ -27,14 +34,26 @@ async function run() {
   await fs.writeFile(path.join(cwd, "a", "b", "AGENTS.md"), "B");
   await fs.writeFile(path.join(cwd, "a", "b", "c", "file.ts"), "export const x = 1;\n");
 
+  const branchEntries = [];
   const pi = mockPi();
   extension(pi);
 
-  const ctx = { cwd, hasUI: false };
+  const ctx = {
+    cwd,
+    hasUI: false,
+    sessionManager: {
+      getBranch() {
+        return branchEntries;
+      },
+    },
+  };
+
   const sessionStart = pi.handlers.get("session_start");
+  const sessionTree = pi.handlers.get("session_tree");
   const toolResult = pi.handlers.get("tool_result");
   const contextHook = pi.handlers.get("context");
   assert.ok(sessionStart, "session_start handler must exist");
+  assert.ok(sessionTree, "session_tree handler must exist");
   assert.ok(toolResult, "tool_result handler must exist");
   assert.ok(contextHook, "context handler must exist");
 
@@ -49,7 +68,9 @@ async function run() {
   };
 
   const firstRead = await toolResult(readEvent, ctx);
-  assert.equal(firstRead, undefined, "read output should remain unchanged (silent injection)");
+  assert.ok(firstRead, "first read should persist discovered AGENTS context in details");
+  assert.equal(firstRead.content, undefined, "read output should remain unchanged (silent injection)");
+  assert.equal(persistedFiles(firstRead.details).length, 2, "should persist two nested AGENTS files");
 
   const firstContext = await contextHook({ messages: [] }, ctx);
   assert.ok(firstContext, "context hook should inject hidden AGENTS context message");
@@ -59,8 +80,19 @@ async function run() {
   assert.match(firstContext.messages[0].content, /a\/AGENTS\.md/);
   assert.match(firstContext.messages[0].content, /a\/b\/AGENTS\.md/);
 
+  branchEntries.push({
+    type: "message",
+    message: { role: "toolResult", details: firstRead.details },
+  });
+
+  sessionTree({}, ctx);
+  const resumedContext = await contextHook({ messages: [] }, ctx);
+  assert.ok(resumedContext, "context should rehydrate from branch history after navigation/resume");
+  assert.match(resumedContext.messages[0].content, /a\/AGENTS\.md/);
+  assert.match(resumedContext.messages[0].content, /a\/b\/AGENTS\.md/);
+
   const secondRead = await toolResult(readEvent, ctx);
-  assert.equal(secondRead, undefined, "second read should stay silent");
+  assert.equal(secondRead, undefined, "second read should not emit duplicate persisted updates");
 
   for (let index = 0; index < 7; index += 1) {
     await toolResult(
@@ -86,7 +118,7 @@ async function run() {
     ctx,
   );
 
-  assert.equal(tenthQualifyingAction, undefined, "cadence refresh should remain silent in tool output");
+  assert.equal(tenthQualifyingAction, undefined, "cadence refresh should stay silent when context is unchanged");
 
   await fs.writeFile(path.join(cwd, "a", "b", "c", "AGENTS.md"), "C");
 
@@ -101,7 +133,9 @@ async function run() {
     ctx,
   );
 
-  assert.equal(freshNestedViaBash, undefined, "fresh nested AGENTS load should stay silent in tool output");
+  assert.ok(freshNestedViaBash, "fresh nested AGENTS should persist update details");
+  assert.equal(persistedFiles(freshNestedViaBash.details).length, 1);
+  assert.equal(persistedFiles(freshNestedViaBash.details)[0].path, "a/b/c/AGENTS.md");
 
   const refreshedContext = await contextHook({ messages: [] }, ctx);
   assert.ok(refreshedContext, "context hook should include newly discovered nested AGENTS");

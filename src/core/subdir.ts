@@ -6,6 +6,13 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { normalizeAtPrefix } from "./workflow.js";
 
 const SUBDIR_CONTEXT_MESSAGE_TYPE = "subdir-context-autoload";
+const SUBDIR_CONTEXT_DETAILS_KEY = "subdirContextAutoload";
+
+type PersistedContextFile = { path: string; content: string };
+
+type PersistedContextDetails = {
+  files: PersistedContextFile[];
+};
 
 function resolvePath(targetPath: string, baseDir: string): string {
   const cleaned = normalizeAtPrefix(targetPath);
@@ -65,6 +72,37 @@ function bashTargets(value: string, base: string): string[] {
   return paths;
 }
 
+function parsePersistedContextDetails(details: unknown): PersistedContextDetails | null {
+  if (!details || typeof details !== "object" || Array.isArray(details)) return null;
+  const value = (details as Record<string, unknown>)[SUBDIR_CONTEXT_DETAILS_KEY];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const files = (value as Record<string, unknown>).files;
+  if (!Array.isArray(files)) return null;
+  const parsed = files
+    .filter((item): item is PersistedContextFile => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+      const pathValue = (item as Record<string, unknown>).path;
+      const contentValue = (item as Record<string, unknown>).content;
+      return typeof pathValue === "string" && typeof contentValue === "string";
+    })
+    .map((item) => ({ path: item.path, content: item.content }));
+  if (!parsed.length) return null;
+  return { files: parsed };
+}
+
+function mergePersistedContextDetails(
+  baseDetails: unknown,
+  injected: PersistedContextDetails,
+): Record<string, unknown> {
+  if (baseDetails && typeof baseDetails === "object" && !Array.isArray(baseDetails)) {
+    return {
+      ...(baseDetails as Record<string, unknown>),
+      [SUBDIR_CONTEXT_DETAILS_KEY]: injected,
+    };
+  }
+  return { [SUBDIR_CONTEXT_DETAILS_KEY]: injected };
+}
+
 export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
   const loadedAgents = new Set<string>();
   const loadedAgentsContent = new Map<string, string>();
@@ -72,31 +110,6 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
   let cwdAgentsPath = "";
   let homeDir = "";
   let readCount = 0;
-
-  function resetSession(cwd: string): void {
-    currentCwd = resolvePath(cwd, process.cwd());
-    cwdAgentsPath = path.join(currentCwd, "AGENTS.md");
-    homeDir = resolvePath(os.homedir(), process.cwd());
-    readCount = 0;
-    loadedAgents.clear();
-    loadedAgentsContent.clear();
-    loadedAgents.add(cwdAgentsPath);
-  }
-
-  function findAgentsFiles(filePath: string, rootDir: string): string[] {
-    if (!rootDir) return [];
-    const agentsFiles: string[] = [];
-    let dir = path.dirname(filePath);
-    while (isInsideRoot(rootDir, dir)) {
-      const candidate = path.join(dir, "AGENTS.md");
-      if (candidate !== cwdAgentsPath && fs.existsSync(candidate)) agentsFiles.push(candidate);
-      if (dir === rootDir) break;
-      const parent = path.dirname(dir);
-      if (parent === dir) break;
-      dir = parent;
-    }
-    return agentsFiles.reverse();
-  }
 
   function relativePath(absolutePath: string): string {
     const relative = currentCwd ? path.relative(currentCwd, absolutePath) : absolutePath;
@@ -129,12 +142,60 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     };
   }
 
+  function resetSession(cwd: string): void {
+    currentCwd = resolvePath(cwd, process.cwd());
+    cwdAgentsPath = path.join(currentCwd, "AGENTS.md");
+    homeDir = resolvePath(os.homedir(), process.cwd());
+    readCount = 0;
+    loadedAgents.clear();
+    loadedAgentsContent.clear();
+    loadedAgents.add(cwdAgentsPath);
+  }
+
+  function rehydrateFromBranch(ctx: ExtensionContext): void {
+    const branchEntries = ctx.sessionManager.getBranch();
+    for (const entry of branchEntries) {
+      if (!entry || typeof entry !== "object" || entry.type !== "message") continue;
+      const message = (entry as { message?: unknown }).message;
+      if (!message || typeof message !== "object" || Array.isArray(message)) continue;
+      const role = (message as { role?: unknown }).role;
+      if (role !== "toolResult") continue;
+      const details = (message as { details?: unknown }).details;
+      const persisted = parsePersistedContextDetails(details);
+      if (!persisted) continue;
+      for (const file of persisted.files) {
+        const absolute = resolvePath(file.path, currentCwd);
+        if (path.basename(absolute) === "AGENTS.md" && absolute !== cwdAgentsPath) {
+          loadedAgents.add(absolute);
+          loadedAgentsContent.set(absolute, file.content);
+        }
+      }
+    }
+  }
+
+  function findAgentsFiles(filePath: string, rootDir: string): string[] {
+    if (!rootDir) return [];
+    const agentsFiles: string[] = [];
+    let dir = path.dirname(filePath);
+    while (isInsideRoot(rootDir, dir)) {
+      const candidate = path.join(dir, "AGENTS.md");
+      if (candidate !== cwdAgentsPath && fs.existsSync(candidate)) agentsFiles.push(candidate);
+      if (dir === rootDir) break;
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return agentsFiles.reverse();
+  }
+
   const handleSessionChange = (_event: unknown, ctx: ExtensionContext): void => {
     resetSession(ctx.cwd);
+    rehydrateFromBranch(ctx);
   };
 
   pi.on("session_start", handleSessionChange);
   pi.on("session_switch", handleSessionChange);
+  pi.on("session_tree", handleSessionChange);
 
   pi.on("tool_result", async (event, ctx) => {
     if (event.isError) return undefined;
@@ -146,7 +207,10 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     const isDiscoveryBash =
       isBash && typeof bashInput === "string" && isDiscoveryBashCommand(bashInput);
     if (!isRead && !isDiscoveryBash) return undefined;
-    if (!currentCwd) resetSession(ctx.cwd);
+    if (!currentCwd) {
+      resetSession(ctx.cwd);
+      rehydrateFromBranch(ctx);
+    }
 
     readCount += 1;
 
@@ -186,13 +250,17 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     if (!hasFresh && !shouldRefresh) return undefined;
 
     const loadedNow: string[] = [];
+    const persistedFiles: PersistedContextFile[] = [];
 
     for (const agentsPath of agentFiles) {
       try {
         const content = await fs.promises.readFile(agentsPath, "utf-8");
+        const previous = loadedAgentsContent.get(agentsPath);
         const wasLoaded = loadedAgents.has(agentsPath);
         loadedAgents.add(agentsPath);
+        if (previous === content) continue;
         loadedAgentsContent.set(agentsPath, content);
+        persistedFiles.push({ path: relativePath(agentsPath), content });
         if (!wasLoaded) loadedNow.push(relativePath(agentsPath));
       } catch (error) {
         if (ctx.hasUI) ctx.ui.notify(`Failed to load ${agentsPath}: ${String(error)}`, "warning");
@@ -207,7 +275,9 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
       ctx.ui.notify(label, "info");
     }
 
-    return undefined;
+    if (!persistedFiles.length) return undefined;
+    const details = mergePersistedContextDetails(event.details, { files: persistedFiles });
+    return { details };
   });
 
   pi.on("context", async (event) => {

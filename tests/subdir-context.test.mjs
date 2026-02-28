@@ -49,11 +49,9 @@ async function run() {
   };
 
   const sessionStart = pi.handlers.get("session_start");
-  const sessionTree = pi.handlers.get("session_tree");
   const toolResult = pi.handlers.get("tool_result");
   const contextHook = pi.handlers.get("context");
   assert.ok(sessionStart, "session_start handler must exist");
-  assert.ok(sessionTree, "session_tree handler must exist");
   assert.ok(toolResult, "tool_result handler must exist");
   assert.ok(contextHook, "context handler must exist");
 
@@ -72,6 +70,11 @@ async function run() {
   assert.equal(firstRead.content, undefined, "read output should remain unchanged (silent injection)");
   assert.equal(persistedFiles(firstRead.details).length, 2, "should persist two nested AGENTS files");
 
+  branchEntries.push({
+    type: "message",
+    message: { role: "toolResult", details: firstRead.details },
+  });
+
   const firstContext = await contextHook({ messages: [] }, ctx);
   assert.ok(firstContext, "context hook should inject hidden AGENTS context message");
   assert.equal(firstContext.messages.length, 1);
@@ -80,14 +83,21 @@ async function run() {
   assert.match(firstContext.messages[0].content, /a\/AGENTS\.md/);
   assert.match(firstContext.messages[0].content, /a\/b\/AGENTS\.md/);
 
+  branchEntries.length = 0;
+  const emptyBranchContext = await contextHook({ messages: [] }, ctx);
+  assert.equal(
+    emptyBranchContext,
+    undefined,
+    "context hook should not inject stale AGENTS context when active branch has none",
+  );
+
   branchEntries.push({
     type: "message",
     message: { role: "toolResult", details: firstRead.details },
   });
-
-  sessionTree({}, ctx);
+  sessionStart({}, ctx);
   const resumedContext = await contextHook({ messages: [] }, ctx);
-  assert.ok(resumedContext, "context should rehydrate from branch history after navigation/resume");
+  assert.ok(resumedContext, "context should be available immediately after resume/session start");
   assert.match(resumedContext.messages[0].content, /a\/AGENTS\.md/);
   assert.match(resumedContext.messages[0].content, /a\/b\/AGENTS\.md/);
 
@@ -136,6 +146,11 @@ async function run() {
   assert.ok(freshNestedViaBash, "fresh nested AGENTS should persist update details");
   assert.equal(persistedFiles(freshNestedViaBash.details).length, 1);
   assert.equal(persistedFiles(freshNestedViaBash.details)[0].path, "a/b/c/AGENTS.md");
+
+  branchEntries.push({
+    type: "message",
+    message: { role: "toolResult", details: freshNestedViaBash.details },
+  });
 
   const refreshedContext = await contextHook({ messages: [] }, ctx);
   assert.ok(refreshedContext, "context hook should include newly discovered nested AGENTS");

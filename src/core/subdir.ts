@@ -116,9 +116,69 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     return (relative || absolutePath).replaceAll("\\", "/");
   }
 
-  function buildInjectedContextMessage() {
-    if (!loadedAgentsContent.size) return null;
-    const files = [...loadedAgentsContent.entries()].sort(([a], [b]) => a.localeCompare(b));
+  function resetSession(cwd: string): void {
+    currentCwd = resolvePath(cwd, process.cwd());
+    cwdAgentsPath = path.join(currentCwd, "AGENTS.md");
+    homeDir = resolvePath(os.homedir(), process.cwd());
+    readCount = 0;
+    loadedAgents.clear();
+    loadedAgentsContent.clear();
+    loadedAgents.add(cwdAgentsPath);
+  }
+
+  function ensureSession(cwd: string): void {
+    if (!currentCwd) resetSession(cwd);
+  }
+
+  function collectBranchContext(ctx: ExtensionContext): Map<string, string> {
+    ensureSession(ctx.cwd);
+    const out = new Map<string, string>();
+    const branchEntries = ctx.sessionManager.getBranch();
+    for (const entry of branchEntries) {
+      if (!entry || typeof entry !== "object" || entry.type !== "message") continue;
+      const message = (entry as { message?: unknown }).message;
+      if (!message || typeof message !== "object" || Array.isArray(message)) continue;
+      if ((message as { role?: unknown }).role !== "toolResult") continue;
+      const details = (message as { details?: unknown }).details;
+      const persisted = parsePersistedContextDetails(details);
+      if (!persisted) continue;
+      for (const file of persisted.files) {
+        const absolute = resolvePath(file.path, currentCwd);
+        if (path.basename(absolute) !== "AGENTS.md" || absolute === cwdAgentsPath) continue;
+        out.set(absolute, file.content);
+      }
+    }
+    return out;
+  }
+
+  function syncRuntimeFromBranch(branchContext: Map<string, string>): void {
+    loadedAgents.clear();
+    loadedAgents.add(cwdAgentsPath);
+    loadedAgentsContent.clear();
+    for (const [agentsPath, content] of branchContext.entries()) {
+      loadedAgents.add(agentsPath);
+      loadedAgentsContent.set(agentsPath, content);
+    }
+  }
+
+  function findAgentsFiles(filePath: string, rootDir: string): string[] {
+    if (!rootDir) return [];
+    const agentsFiles: string[] = [];
+    let dir = path.dirname(filePath);
+    while (isInsideRoot(rootDir, dir)) {
+      const candidate = path.join(dir, "AGENTS.md");
+      if (candidate !== cwdAgentsPath && fs.existsSync(candidate)) agentsFiles.push(candidate);
+      if (dir === rootDir) break;
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+    return agentsFiles.reverse();
+  }
+
+  function buildInjectedContextMessage(branchContext: Map<string, string>) {
+    if (!branchContext.size) return null;
+    const files = [...branchContext.entries()].sort(([a], [b]) => a.localeCompare(b));
     const body = files
       .map(([agentsPath, content]) => {
         const rel = relativePath(agentsPath);
@@ -142,55 +202,8 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     };
   }
 
-  function resetSession(cwd: string): void {
-    currentCwd = resolvePath(cwd, process.cwd());
-    cwdAgentsPath = path.join(currentCwd, "AGENTS.md");
-    homeDir = resolvePath(os.homedir(), process.cwd());
-    readCount = 0;
-    loadedAgents.clear();
-    loadedAgentsContent.clear();
-    loadedAgents.add(cwdAgentsPath);
-  }
-
-  function rehydrateFromBranch(ctx: ExtensionContext): void {
-    const branchEntries = ctx.sessionManager.getBranch();
-    for (const entry of branchEntries) {
-      if (!entry || typeof entry !== "object" || entry.type !== "message") continue;
-      const message = (entry as { message?: unknown }).message;
-      if (!message || typeof message !== "object" || Array.isArray(message)) continue;
-      const role = (message as { role?: unknown }).role;
-      if (role !== "toolResult") continue;
-      const details = (message as { details?: unknown }).details;
-      const persisted = parsePersistedContextDetails(details);
-      if (!persisted) continue;
-      for (const file of persisted.files) {
-        const absolute = resolvePath(file.path, currentCwd);
-        if (path.basename(absolute) === "AGENTS.md" && absolute !== cwdAgentsPath) {
-          loadedAgents.add(absolute);
-          loadedAgentsContent.set(absolute, file.content);
-        }
-      }
-    }
-  }
-
-  function findAgentsFiles(filePath: string, rootDir: string): string[] {
-    if (!rootDir) return [];
-    const agentsFiles: string[] = [];
-    let dir = path.dirname(filePath);
-    while (isInsideRoot(rootDir, dir)) {
-      const candidate = path.join(dir, "AGENTS.md");
-      if (candidate !== cwdAgentsPath && fs.existsSync(candidate)) agentsFiles.push(candidate);
-      if (dir === rootDir) break;
-      const parent = path.dirname(dir);
-      if (parent === dir) break;
-      dir = parent;
-    }
-    return agentsFiles.reverse();
-  }
-
   const handleSessionChange = (_event: unknown, ctx: ExtensionContext): void => {
     resetSession(ctx.cwd);
-    rehydrateFromBranch(ctx);
   };
 
   pi.on("session_start", handleSessionChange);
@@ -207,10 +220,10 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     const isDiscoveryBash =
       isBash && typeof bashInput === "string" && isDiscoveryBashCommand(bashInput);
     if (!isRead && !isDiscoveryBash) return undefined;
-    if (!currentCwd) {
-      resetSession(ctx.cwd);
-      rehydrateFromBranch(ctx);
-    }
+
+    ensureSession(ctx.cwd);
+    const branchContext = collectBranchContext(ctx);
+    syncRuntimeFromBranch(branchContext);
 
     readCount += 1;
 
@@ -245,9 +258,6 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
 
     const agentFiles = [...paths];
     if (!agentFiles.length) return undefined;
-    const hasFresh = agentFiles.some((agentsPath) => !loadedAgents.has(agentsPath));
-    const shouldRefresh = readCount % 10 === 0;
-    if (!hasFresh && !shouldRefresh) return undefined;
 
     const loadedNow: string[] = [];
     const persistedFiles: PersistedContextFile[] = [];
@@ -255,12 +265,13 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     for (const agentsPath of agentFiles) {
       try {
         const content = await fs.promises.readFile(agentsPath, "utf-8");
-        const previous = loadedAgentsContent.get(agentsPath);
         const wasLoaded = loadedAgents.has(agentsPath);
         loadedAgents.add(agentsPath);
-        if (previous === content) continue;
         loadedAgentsContent.set(agentsPath, content);
-        persistedFiles.push({ path: relativePath(agentsPath), content });
+        const branchContent = branchContext.get(agentsPath);
+        if (branchContent !== content) {
+          persistedFiles.push({ path: relativePath(agentsPath), content });
+        }
         if (!wasLoaded) loadedNow.push(relativePath(agentsPath));
       } catch (error) {
         if (ctx.hasUI) ctx.ui.notify(`Failed to load ${agentsPath}: ${String(error)}`, "warning");
@@ -280,8 +291,10 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     return { details };
   });
 
-  pi.on("context", async (event) => {
-    const injected = buildInjectedContextMessage();
+  pi.on("context", async (event, ctx) => {
+    ensureSession(ctx.cwd);
+    const branchContext = collectBranchContext(ctx);
+    const injected = buildInjectedContextMessage(branchContext);
     if (!injected) return undefined;
     const baseMessages = Array.isArray(event.messages) ? event.messages : [];
     const messages = baseMessages.filter((message) => {

@@ -1,12 +1,29 @@
 {
-  "name": "@howaboua/pi-workflows-tool",
+  "name": "@howaboua/pi-markdown-workflows",
   "version": "0.1.0",
   "description": "Pi extension with workflows tools and embedded subdirectory AGENTS.md context loading",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IgorWarzocha/pi-markdown-workflows.git"
+  },
+  "homepage": "https://github.com/IgorWarzocha/pi-markdown-workflows#readme",
+  "bugs": {
+    "url": "https://github.com/IgorWarzocha/pi-markdown-workflows/issues"
+  },
   "keywords": [
-    "agents",
+    "pi",
+    "pi-coding-agent",
+    "extension",
     "pi-extension",
     "pi-package",
-    "workflows"
+    "agents",
+    "agents-md",
+    "skills",
+    "workflows",
+    "markdown",
+    "sop",
+    "subdir-context",
+    "automation"
   ],
   "license": "MIT",
   "files": [
@@ -21,11 +38,17 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "test": "node tests/subdir-context.test.mjs",
     "check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "lint": "oxfmt --check index.ts src/**/*.ts",
     "format": "oxfmt index.ts src/**/*.ts",
-    "prepublishOnly": "npm run build"
+    "verify": "npm run lint && npm run check && npm run build && npm test",
+    "publish:dry-run": "npm publish --dry-run",
+    "publish:dev": "npm publish --tag dev",
+    "release:dev": "npm version prerelease --preid dev && npm publish --tag dev",
+    "prepack": "npm run verify",
+    "prepublishOnly": "npm run verify"
   },
   "dependencies": {
     "@howaboua/pi-howaboua-extensions-primitives-sdk": "^0.3.0",
@@ -44,5 +67,8 @@
     "extensions": [
       "./dist/index.js"
     ]
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

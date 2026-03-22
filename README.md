@@ -64,7 +64,15 @@ Recommended global skills location:
 
 - `~/.pi/agent/skills/`
 
-## Install (Git only)
+## Install
+
+From npm:
+
+```bash
+pi install npm:@howaboua/pi-markdown-workflows
+```
+
+From Git:
 
 ```bash
 pi install git+https://github.com/IgorWarzocha/pi-markdown-workflows.git
@@ -74,6 +82,24 @@ For local development:
 
 ```bash
 pi -e /absolute/path/to/pi-markdown-workflows/index.ts
+```
+
+## Publishing
+
+```bash
+npm run publish:dry-run
+```
+
+Dev tag publish:
+
+```bash
+npm run publish:dev
+```
+
+Bump prerelease + publish dev tag:
+
+```bash
+npm run release:dev
 ```
 
 ## Recommended setting to reduce clutter

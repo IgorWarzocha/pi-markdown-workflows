@@ -9,12 +9,14 @@ export function registerWorkflowsCreateTool(pi: ExtensionAPI): void {
     name: "workflows_create",
     label: "Create Workflow",
     description:
-      "Create or update a repeatable workflow skill at ./.pi/workflows/<name>/SKILL.md. Required parameters: name, description, body. The tool writes frontmatter automatically (name + description), so body MUST NOT include frontmatter. Use this when capturing a confirmed repeatable process; body SHOULD include prerequisites, ordered steps, and expected outcomes. RFC 2119 / RFC 8174 keyword semantics apply (MUST, SHOULD, MAY).",
+      "Create or update a reusable repo-local workflow at ./.pi/workflows/<slug>/SKILL.md. Use after confirming a repeatable SOP. Inputs: name, description, body. body must be markdown only with no frontmatter; the tool derives the slug from name and writes frontmatter automatically.",
     parameters: Type.Object({
       name: Type.String({
-        description: "Workflow name (used for frontmatter name and directory slug)",
+        description: "Workflow title",
       }),
-      description: Type.String({ description: "Short summary for frontmatter description" }),
+      description: Type.String({
+        description: "One-line summary of what the workflow does and when to use it",
+      }),
       body: Type.String({ description: "Markdown workflow content only (no frontmatter)" }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {

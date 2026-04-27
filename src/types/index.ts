@@ -1,3 +1,5 @@
+import type { SourceInfo } from "@mariozechner/pi-coding-agent";
+
 export type TextContent = { type: "text"; text: string };
 
 export type WorkflowDefinition = {
@@ -10,6 +12,8 @@ export type SkillDefinition = {
   name: string;
   description: string;
   location: string;
+  sourceInfo?: SourceInfo;
+  canDelete?: boolean;
 };
 
 export type WorkflowCreateInput = {

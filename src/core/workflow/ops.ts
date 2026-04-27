@@ -1,10 +1,13 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { getAgentDir, withFileMutationQueue, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import type { WorkflowCreateInput, WorkflowDefinition } from "../../types/index.js";
 import { PRIMARY_WORKFLOW_FILE, PRIMARY_WORKFLOWS_DIR, slugify, stripFrontmatter } from "./path.js";
+
+function yamlString(value: string): string {
+  return JSON.stringify(value);
+}
 
 export async function createWorkflow(
   cwd: string,
@@ -15,15 +18,17 @@ export async function createWorkflow(
   const workflowPath = path.join(workflowDir, PRIMARY_WORKFLOW_FILE);
   const content = [
     "---",
-    `name: ${input.name}`,
-    `description: ${input.description}`,
+    `name: ${yamlString(input.name)}`,
+    `description: ${yamlString(input.description)}`,
     "---",
     "",
     stripFrontmatter(input.body).trim(),
     "",
   ].join("\n");
-  await fs.promises.mkdir(workflowDir, { recursive: true });
-  await fs.promises.writeFile(workflowPath, content, "utf-8");
+  await withFileMutationQueue(workflowPath, async () => {
+    await fs.promises.mkdir(workflowDir, { recursive: true });
+    await fs.promises.writeFile(workflowPath, content, "utf-8");
+  });
   return { name: input.name, description: input.description, location: workflowPath };
 }
 
@@ -42,15 +47,29 @@ export async function injectWorkflowUse(
 
 export async function promoteWorkflow(cwd: string, workflow: WorkflowDefinition): Promise<string> {
   const slug = slugify(workflow.name) || "workflow";
-  const skillDir = path.join(os.homedir(), ".pi", "agent", "skills", slug);
+  const skillDir = path.join(getAgentDir(), "skills", slug);
   const target = path.join(skillDir, PRIMARY_WORKFLOW_FILE);
-  if (fs.existsSync(target)) {
-    throw new Error(`Cannot promote workflow: skill already exists at ${target}`);
-  }
-  await fs.promises.mkdir(skillDir, { recursive: true });
-  const content = await fs.promises.readFile(workflow.location, "utf-8");
-  await fs.promises.writeFile(target, content, "utf-8");
-  await fs.promises.rm(path.dirname(workflow.location), { recursive: true, force: true });
+  await withFileMutationQueue(target, async () => {
+    if (fs.existsSync(target)) {
+      throw new Error(`Cannot promote workflow: skill already exists at ${target}`);
+    }
+    await fs.promises.mkdir(skillDir, { recursive: true });
+    const content = await fs.promises.readFile(workflow.location, "utf-8");
+    const body = stripFrontmatter(content).trim();
+    const promotedContent = [
+      "---",
+      `name: ${yamlString(slug)}`,
+      `description: ${yamlString(workflow.description)}`,
+      "---",
+      "",
+      `# ${workflow.name}`,
+      "",
+      body,
+      "",
+    ].join("\n");
+    await fs.promises.writeFile(target, promotedContent, "utf-8");
+    await fs.promises.rm(path.dirname(workflow.location), { recursive: true, force: true });
+  });
   return target;
 }
 

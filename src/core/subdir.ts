@@ -207,7 +207,6 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
   };
 
   pi.on("session_start", handleSessionChange);
-  pi.on("session_switch", handleSessionChange);
   pi.on("session_tree", handleSessionChange);
 
   pi.on("tool_result", async (event, ctx) => {

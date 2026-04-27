@@ -1,5 +1,5 @@
-import { Type } from "@sinclair/typebox";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import Type from "typebox";
 
 import { createWorkflow } from "../core/workflow.js";
 import type { WorkflowCreateInput } from "../types/index.js";
@@ -10,6 +10,10 @@ export function registerWorkflowsCreateTool(pi: ExtensionAPI): void {
     label: "Create Workflow",
     description:
       "Create or update a reusable repo-local workflow at ./.pi/workflows/<slug>/SKILL.md. Use after confirming a repeatable SOP. Inputs: name, description, body. body must be markdown only with no frontmatter; the tool derives the slug from name and writes frontmatter automatically.",
+    promptSnippet: "Create or update repo-local workflow SOP files under .pi/workflows.",
+    promptGuidelines: [
+      "Use workflows_create after confirming a reusable project workflow or SOP should be documented.",
+    ],
     parameters: Type.Object({
       name: Type.String({
         description: "Workflow title",

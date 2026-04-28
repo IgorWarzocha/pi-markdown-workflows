@@ -77,6 +77,13 @@ async function openMenu(
         pi.sendUserMessage(refineSkillPrompt(picked.skill));
         return;
       }
+      if (picked.skill.canDelete === false) {
+        ctx.ui.notify(
+          `Cannot delete package-managed or non-local skill '${picked.skill.name}'`,
+          "warning",
+        );
+        continue;
+      }
       const confirmed = await ctx.ui.confirm(
         "Delete skill",
         `Delete skill '${picked.skill.name}'?`,
@@ -98,7 +105,7 @@ async function openMenu(
     if (picked.action === "promote-to-skill") {
       const confirmed = await ctx.ui.confirm(
         "Promote workflow",
-        `Promote ${picked.workflow.name} to ~/.pi/agent/skills and remove it from workflows?`,
+        `Promote ${picked.workflow.name} to the active Pi agent skills directory and remove it from workflows?`,
       );
       if (!confirmed) continue;
       try {

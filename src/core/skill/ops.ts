@@ -20,6 +20,9 @@ export async function injectSkillUse(
 }
 
 export async function deleteSkill(skill: SkillDefinition): Promise<void> {
+  if (skill.canDelete === false) {
+    throw new Error(`Cannot delete package-managed or non-local skill: ${skill.name}`);
+  }
   const file = path.basename(skill.location).toLowerCase() === "skill.md";
   if (!file) {
     await fs.promises.rm(skill.location, { force: true });

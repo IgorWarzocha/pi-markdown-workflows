@@ -8,20 +8,21 @@ export function registerWorkflowsCreateTool(pi: ExtensionAPI): void {
   pi.registerTool({
     name: "workflows_create",
     label: "Create Workflow",
-    description:
-      "Create or update a reusable repo-local workflow at ./.pi/workflows/<slug>/SKILL.md. Use after confirming a repeatable SOP. Inputs: name, description, body. body must be markdown only with no frontmatter; the tool derives the slug from name and writes frontmatter automatically.",
-    promptSnippet: "Create or update repo-local workflow SOP files under .pi/workflows.",
+    description: "Create or update a repo-local workflow.",
+    promptSnippet: "Create or update repo-local workflow SOP files.",
     promptGuidelines: [
-      "Use workflows_create after confirming a reusable project workflow or SOP should be documented.",
+      "`workflows_create`: Use only after confirming a repeatable workflow, SOP, or project procedure should be documented.",
+      "`workflows_create`: Prefer updating an existing workflow over creating a duplicate.",
+      "`workflows_create`: Write reusable process knowledge, not one-off task notes.",
     ],
     parameters: Type.Object({
       name: Type.String({
-        description: "Workflow title",
+        description: "Workflow title.",
       }),
       description: Type.String({
-        description: "One-line summary of what the workflow does and when to use it",
+        description: "One-line workflow summary.",
       }),
-      body: Type.String({ description: "Markdown workflow content only (no frontmatter)" }),
+      body: Type.String({ description: "Markdown body only; no frontmatter." }),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const input = params as WorkflowCreateInput;

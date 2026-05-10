@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { getAgentDir, withFileMutationQueue, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { getAgentDir, withFileMutationQueue, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { WorkflowCreateInput, WorkflowDefinition } from "../../types/index.js";
 import { PRIMARY_WORKFLOW_FILE, PRIMARY_WORKFLOWS_DIR, slugify, stripFrontmatter } from "./path.js";
 

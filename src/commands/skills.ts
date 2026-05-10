@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { discoverSkillsSync } from "../core/skill.js";
 import { openSkillsMenu } from "../ui/workflow-menu.js";

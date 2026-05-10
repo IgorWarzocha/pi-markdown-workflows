@@ -1,4 +1,4 @@
-import type { SourceInfo } from "@mariozechner/pi-coding-agent";
+import type { SourceInfo } from "@earendil-works/pi-coding-agent";
 
 export type TextContent = { type: "text"; text: string };
 

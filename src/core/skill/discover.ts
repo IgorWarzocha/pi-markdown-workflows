@@ -7,7 +7,7 @@ import {
   getAgentDir,
   loadSkills,
   type Skill,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 import type { SkillDefinition } from "../../types/index.js";
 import { parseSkillFrontmatter, PRIMARY_SKILL_FILE, PRIMARY_SKILLS_PROJECT_DIR } from "./path.js";

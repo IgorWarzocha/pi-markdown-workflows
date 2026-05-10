@@ -11,9 +11,9 @@ export function registerWorkflowsCreateTool(pi: ExtensionAPI): void {
     description: "Create or update a repo-local workflow.",
     promptSnippet: "Create or update repo-local workflow SOP files.",
     promptGuidelines: [
-      "`workflows_create`: Use only after confirming a repeatable workflow, SOP, or project procedure should be documented.",
-      "`workflows_create`: Prefer updating an existing workflow over creating a duplicate.",
-      "`workflows_create`: Write reusable process knowledge, not one-off task notes.",
+      "workflows_create: Use only after confirming a repeatable workflow, SOP, or project procedure should be documented.",
+      "workflows_create: Prefer updating an existing workflow over creating a duplicate.",
+      "workflows_create: Write reusable process knowledge, not one-off task notes.",
     ],
     parameters: Type.Object({
       name: Type.String({

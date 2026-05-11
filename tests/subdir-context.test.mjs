@@ -9,14 +9,19 @@ const DETAILS_KEY = "subdirContextAutoload";
 
 function mockPi() {
   const handlers = new Map();
+  const sentMessages = [];
   return {
     handlers,
+    sentMessages,
     on(name, handler) {
       handlers.set(name, handler);
     },
     registerTool() {},
     registerCommand() {},
     sendUserMessage() {},
+    sendMessage(message) {
+      sentMessages.push(message);
+    },
   };
 }
 
@@ -202,6 +207,43 @@ async function run() {
   assert.ok(freshNestedViaSed, "sed through exec_command should persist nested AGENTS updates");
   assert.equal(persistedFiles(freshNestedViaSed.details).length, 1);
   assert.equal(persistedFiles(freshNestedViaSed.details)[0].path, "a/f/AGENTS.md");
+
+  await fs.mkdir(path.join(cwd, "a", "chained"), { recursive: true });
+  await fs.writeFile(path.join(cwd, "a", "chained", "AGENTS.md"), "CHAINED");
+  await fs.writeFile(path.join(cwd, "a", "chained", "file.ts"), "export const chained = 1;\n");
+
+  const freshNestedViaChainedCommand = await toolResult(
+    {
+      toolName: "exec_command",
+      isError: false,
+      input: { cmd: "mkdir -p ./scratch && echo ok && sed -n '1,5p' ./a/chained/file.ts" },
+      content: [{ type: "text", text: "file" }],
+      details: {},
+    },
+    ctx,
+  );
+
+  assert.ok(freshNestedViaChainedCommand, "chained exec_command should inspect later read commands");
+  assert.equal(persistedFiles(freshNestedViaChainedCommand.details).length, 1);
+  assert.equal(persistedFiles(freshNestedViaChainedCommand.details)[0].path, "a/chained/AGENTS.md");
+
+  await fs.mkdir(path.join(cwd, "a", "g"), { recursive: true });
+  await fs.writeFile(path.join(cwd, "a", "g", "AGENTS.md"), "G");
+
+  const freshNestedViaLsTool = await toolResult(
+    {
+      toolName: "ls",
+      isError: false,
+      input: { path: "./a/g" },
+      content: [{ type: "text", text: "listing" }],
+      details: {},
+    },
+    ctx,
+  );
+
+  assert.ok(freshNestedViaLsTool, "ls tool should persist nested AGENTS updates");
+  assert.equal(persistedFiles(freshNestedViaLsTool.details).length, 1);
+  assert.equal(persistedFiles(freshNestedViaLsTool.details)[0].path, "a/g/AGENTS.md");
 
   branchEntries.push({
     type: "message",

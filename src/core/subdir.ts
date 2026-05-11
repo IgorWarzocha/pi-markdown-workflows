@@ -32,10 +32,19 @@ function isInsideRoot(rootDir: string, targetPath: string): boolean {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-function isDiscoveryShellCommand(value: string): boolean {
-  const lower = value.trim().toLowerCase();
-  if (!lower) return false;
-  const command = lower.split(/\s+/)[0] ?? "";
+function shellCommandParts(value: string): string[] {
+  return value
+    .replaceAll("&&", " ; ")
+    .replaceAll("||", " ; ")
+    .replaceAll("|", " ; ")
+    .replaceAll(";", " ; ")
+    .split(/\s+/)
+    .map((item) => item.trim().replace(/^['"]+|['"]+$/g, ""))
+    .filter(Boolean);
+}
+
+function isDiscoveryCommandAt(parts: string[], index: number): boolean {
+  const command = parts[index]?.toLowerCase() ?? "";
   const names = new Set([
     "ls",
     "find",
@@ -55,23 +64,37 @@ function isDiscoveryShellCommand(value: string): boolean {
     "git",
   ]);
   if (command !== "git") return names.has(command);
-  const parts = lower.split(/\s+/);
-  const subcommand = parts[1] ?? "";
+  const subcommand = parts[index + 1]?.toLowerCase() ?? "";
   return subcommand === "ls-files" || subcommand === "grep";
 }
 
+function isDiscoveryShellCommand(value: string): boolean {
+  const parts = shellCommandParts(value);
+  for (let index = 0; index < parts.length; index += 1) {
+    if (isDiscoveryCommandAt(parts, index)) return true;
+  }
+  return false;
+}
+
 function shellTargets(value: string, base: string): string[] {
-  const parts = value
-    .split(/\s+/)
-    .map((item) => item.trim().replace(/^['"]+|['"]+$/g, ""))
-    .filter(Boolean);
+  const parts = shellCommandParts(value);
   if (!parts.length) return [base];
   const paths: string[] = [];
-  for (let index = 1; index < parts.length; index += 1) {
+  let scanningDiscoveryCommand = false;
+  for (let index = 0; index < parts.length; index += 1) {
     const item = parts[index];
     if (!item) continue;
+    if (item === ";") {
+      scanningDiscoveryCommand = false;
+      continue;
+    }
+    if (isDiscoveryCommandAt(parts, index)) {
+      scanningDiscoveryCommand = true;
+      if (item.toLowerCase() === "git") index += 1;
+      continue;
+    }
+    if (!scanningDiscoveryCommand) continue;
     if (item.startsWith("-")) continue;
-    if (item === "|" || item === "&&" || item === ";") continue;
     if (item.includes("=")) continue;
     if (item === ".") {
       paths.push(base);
@@ -155,7 +178,6 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
       if (!entry || typeof entry !== "object" || entry.type !== "message") continue;
       const message = (entry as { message?: unknown }).message;
       if (!message || typeof message !== "object" || Array.isArray(message)) continue;
-      if ((message as { role?: unknown }).role !== "toolResult") continue;
       const details = (message as { details?: unknown }).details;
       const persisted = parsePersistedContextDetails(details);
       if (!persisted) continue;
@@ -229,6 +251,7 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
   pi.on("tool_result", async (event, ctx) => {
     if (event.isError) return undefined;
     const isRead = event.toolName === "read";
+    const isPathDiscoveryTool = ["grep", "find", "ls"].includes(event.toolName);
     const shellInput =
       typeof event.input.command === "string"
         ? event.input.command
@@ -240,11 +263,11 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
       event.toolName === "exec" ||
       event.toolName === "exec_command" ||
       event.toolName === "shell";
-    if (!isRead && !isShell) return undefined;
+    if (!isRead && !isShell && !isPathDiscoveryTool) return undefined;
     const pathInput = event.input.path as string | undefined;
     const isDiscoveryShell =
       isShell && typeof shellInput === "string" && isDiscoveryShellCommand(shellInput);
-    if (!isRead && !isDiscoveryShell) return undefined;
+    if (!isRead && !isPathDiscoveryTool && !isDiscoveryShell) return undefined;
 
     ensureSession(ctx.cwd);
     const branchContext = collectBranchContext(ctx);
@@ -252,13 +275,14 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
 
     readCount += 1;
 
-    const targets = isRead
-      ? pathInput
-        ? [resolvePath(pathInput, currentCwd)]
-        : []
-      : shellInput
-        ? shellTargets(shellInput, currentCwd)
-        : [];
+    const targets =
+      isRead || isPathDiscoveryTool
+        ? pathInput
+          ? [resolvePath(pathInput, currentCwd)]
+          : [currentCwd]
+        : shellInput
+          ? shellTargets(shellInput, currentCwd)
+          : [];
     if (!targets.length) return undefined;
 
     const paths = new Set<string>();

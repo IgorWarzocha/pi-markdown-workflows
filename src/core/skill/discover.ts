@@ -2,12 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import {
-  DefaultResourceLoader,
-  getAgentDir,
-  loadSkills,
-  type Skill,
-} from "@earendil-works/pi-coding-agent";
+import { getAgentDir, loadSkills, type Skill } from "@earendil-works/pi-coding-agent";
 
 import type { SkillDefinition } from "../../types/index.js";
 import { parseSkillFrontmatter, PRIMARY_SKILL_FILE, PRIMARY_SKILLS_PROJECT_DIR } from "./path.js";
@@ -174,31 +169,9 @@ function toSkillDefinition(skill: Skill): SkillDefinition {
 export async function discoverSkills(
   cwd: string,
 ): Promise<{ skills: SkillDefinition[]; checkedDirs: string[] }> {
-  const agentDir = getAgentDir();
-  try {
-    const loader = new DefaultResourceLoader({
-      cwd,
-      agentDir,
-      noExtensions: true,
-      noPromptTemplates: true,
-      noThemes: true,
-      noContextFiles: true,
-    });
-    await loader.reload();
-    const result = loader.getSkills();
-    const strictSkills = result.skills.map(toSkillDefinition);
-    const legacySkills = mergeLegacySkills(strictSkills, discoverFallbackSkills(cwd, agentDir, undefined, false));
-    return {
-      skills: [...strictSkills, ...legacySkills],
-      checkedDirs: [
-        ...result.skills.map((skill) => skill.baseDir),
-        ...legacySkills.map((skill) => path.dirname(skill.location)),
-      ],
-    };
-  } catch {
-    const skills = discoverFallbackSkills(cwd, agentDir);
-    return { skills, checkedDirs: skills.map((skill) => path.dirname(skill.location)) };
-  }
+  const checkedDirs: string[] = [];
+  const skills = discoverSkillsSync(cwd, checkedDirs);
+  return { skills, checkedDirs };
 }
 
 function realPathKey(value: string): string {

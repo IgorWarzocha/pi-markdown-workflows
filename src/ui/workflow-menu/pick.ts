@@ -38,6 +38,9 @@ import {
   type WorkflowListItem,
 } from "./view.js";
 
+const TOP_LIST_VISIBLE_ROWS = 5;
+const ACTION_LIST_VISIBLE_ROWS = 7;
+
 export function createPick(
   ctx: ExtensionCommandContext,
   workflows: WorkflowDefinition[],
@@ -54,7 +57,7 @@ export function createPick(
     tab: true,
     search: true,
     prompt: true,
-    page: 9,
+    page: TOP_LIST_VISIBLE_ROWS,
     find: (item, query) =>
       item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
     intent: (item) => ({ type: "action", name: `workflow:${item.key}` }),
@@ -68,7 +71,7 @@ export function createPick(
     tab: true,
     search: true,
     prompt: true,
-    page: 9,
+    page: TOP_LIST_VISIBLE_ROWS,
     find: (item, query) =>
       item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
     intent: (item) => ({ type: "action", name: `skill:${item.key}` }),
@@ -80,7 +83,7 @@ export function createPick(
       title: "Workflow actions",
       items: workflowActionRows(),
       shortcuts: "j/k select • v toggle preview • J/K scroll preview • enter confirm",
-      page: 9,
+      page: ACTION_LIST_VISIBLE_ROWS,
       find: (item, query) =>
         item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
       intent: (item) => ({ type: "action", name: item.name }),
@@ -94,7 +97,7 @@ export function createPick(
       title: "Skill actions",
       items: skillActionRows(),
       shortcuts: "j/k select • v toggle preview • J/K scroll preview • enter confirm",
-      page: 9,
+      page: ACTION_LIST_VISIBLE_ROWS,
       find: (item, query) =>
         item.name.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
       intent: (item) => ({ type: "action", name: item.name }),

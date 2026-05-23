@@ -48,13 +48,13 @@ The tool writes workflow files to:
 
 This makes workflow capture deterministic and reusable across future sessions.
 
-### Nested AGENTS.md context autoload with periodic refresh
-The extension auto-loads nested `AGENTS.md` files when relevant files/paths are accessed.
+### Nested AGENTS.md context autoload
+The extension auto-loads nested `AGENTS.md` files into the tool result that discovered them when relevant files/paths are accessed.
 
 - triggers on `read`
 - also triggers for discovery/listing/read-ish shell tool commands (`bash`, `exec`, `exec_command`, `shell`) using `command` or `cmd` input (`ls`, `find`, `rg`, `grep`, `fd`, `tree`, `cat`, `sed`, `head`, `tail`, `nl`, `wc`, `stat`, `file`, `du`, `git ls-files`, `git grep`)
 - loads full nested chain (excluding cwd root `AGENTS.md` reinjection)
-- periodic refresh cadence: every **10** qualifying operations
+- appends context only to the triggering tool result when new/changed nested context is discovered
 
 ## Workflows vs skills
 
@@ -86,6 +86,8 @@ pi -e /absolute/path/to/pi-markdown-workflows/index.ts
 ```
 
 ## Publishing
+
+Release history is tracked in [CHANGELOG.md](./CHANGELOG.md).
 
 ```bash
 npm run publish:dry-run

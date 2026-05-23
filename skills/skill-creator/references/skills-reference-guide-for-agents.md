@@ -373,6 +373,8 @@ The body is where the workflow lives.
 
 A good body is operational, not promotional.
 
+The body MUST NOT contain `When to use`, `Do not use when`, `Activation`, `Triggers`, or similar trigger-selection sections. Trigger guidance belongs in the frontmatter `description`, because by the time the body is loaded the agent should already know why the skill applies. If the agent would need a body section to decide whether to use the skill, the description is incomplete and must be improved.
+
 It SHOULD answer:
 
 - What is the goal?
@@ -389,8 +391,6 @@ It SHOULD answer:
 # Skill Title
 
 ## Purpose
-## When to use
-## Do not use when
 ## Inputs expected
 ## Prerequisites
 ## Workflow
@@ -408,14 +408,6 @@ This is a recommendation, not a law. What matters is clarity.
 #### Purpose
 
 A one paragraph summary of the skill's job.
-
-#### When to use
-
-A compact list of situations, user requests, or uploaded artefacts that fit.
-
-#### Do not use when
-
-Optional but strongly recommended when adjacent skills may overlap.
 
 #### Inputs expected
 
@@ -1109,15 +1101,6 @@ metadata:
 
 ## Purpose
 Describe the job of the skill in one paragraph.
-
-## When to use
-- trigger case 1
-- trigger case 2
-- trigger case 3
-
-## Do not use when
-- adjacent case 1
-- adjacent case 2
 
 ## Inputs expected
 - required input 1

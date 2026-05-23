@@ -87,6 +87,8 @@ pi -e /absolute/path/to/pi-markdown-workflows/index.ts
 
 ## Publishing
 
+Release history is tracked in [CHANGELOG.md](./CHANGELOG.md).
+
 ```bash
 npm run publish:dry-run
 ```

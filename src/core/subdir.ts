@@ -7,6 +7,7 @@ import { normalizeAtPrefix } from "./workflow.js";
 
 const SUBDIR_CONTEXT_DETAILS_KEY = "subdirContextAutoload";
 const SUBDIR_CONTEXT_MARKER = "<subdirectory_agents_context>";
+const RECENT_TOOL_RESULT_DEDUPE_MS = 10_000;
 
 type PersistedContextFile = { path: string; content: string };
 
@@ -157,6 +158,7 @@ function contentHasSubdirContext(content: unknown): boolean {
 export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
   const loadedAgents = new Set<string>();
   const loadedAgentsContent = new Map<string, string>();
+  const recentToolResultContent = new Map<string, { content: string; timestamp: number }>();
   let currentCwd = "";
   let cwdAgentsPath = "";
   let homeDir = "";
@@ -174,6 +176,7 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     readCount = 0;
     loadedAgents.clear();
     loadedAgentsContent.clear();
+    recentToolResultContent.clear();
     loadedAgents.add(cwdAgentsPath);
   }
 
@@ -205,10 +208,21 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
   function syncRuntimeFromBranch(branchContext: Map<string, string>): void {
     loadedAgents.clear();
     loadedAgents.add(cwdAgentsPath);
+    loadedAgentsContent.clear();
     for (const [agentsPath, content] of branchContext.entries()) {
       loadedAgents.add(agentsPath);
       loadedAgentsContent.set(agentsPath, content);
     }
+  }
+
+  function recentlyEmittedContent(agentsPath: string): string | undefined {
+    const now = Date.now();
+    for (const [key, value] of recentToolResultContent.entries()) {
+      if (now - value.timestamp > RECENT_TOOL_RESULT_DEDUPE_MS) {
+        recentToolResultContent.delete(key);
+      }
+    }
+    return recentToolResultContent.get(agentsPath)?.content;
   }
 
   function findAgentsFiles(filePath: string, rootDir: string): string[] {
@@ -317,11 +331,12 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
         const wasLoaded = loadedAgents.has(agentsPath);
         loadedAgents.add(agentsPath);
         const branchContent = branchContext.get(agentsPath);
-        const knownContent = branchContent ?? loadedAgentsContent.get(agentsPath);
+        const knownContent = branchContent ?? recentlyEmittedContent(agentsPath);
         if (knownContent !== content) {
           persistedFiles.push({ path: relativePath(agentsPath), content });
         }
         loadedAgentsContent.set(agentsPath, content);
+        recentToolResultContent.set(agentsPath, { content, timestamp: Date.now() });
         if (!wasLoaded) loadedNow.push(relativePath(agentsPath));
       } catch (error) {
         if (ctx.hasUI) ctx.ui.notify(`Failed to load ${agentsPath}: ${String(error)}`, "warning");

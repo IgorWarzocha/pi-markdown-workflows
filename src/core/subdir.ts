@@ -5,8 +5,8 @@ import path from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { normalizeAtPrefix } from "./workflow.js";
 
-const SUBDIR_CONTEXT_MESSAGE_TYPE = "subdir-context-autoload";
 const SUBDIR_CONTEXT_DETAILS_KEY = "subdirContextAutoload";
+const SUBDIR_CONTEXT_MARKER = "<subdirectory_agents_context>";
 
 type PersistedContextFile = { path: string; content: string };
 
@@ -143,6 +143,17 @@ function mergePersistedContextDetails(
   return { [SUBDIR_CONTEXT_DETAILS_KEY]: injected };
 }
 
+function contentHasSubdirContext(content: unknown): boolean {
+  if (typeof content === "string") return content.includes(SUBDIR_CONTEXT_MARKER);
+  if (!Array.isArray(content)) return false;
+  return content.some((item) => {
+    if (typeof item === "string") return item.includes(SUBDIR_CONTEXT_MARKER);
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const text = (item as Record<string, unknown>).text;
+    return typeof text === "string" && text.includes(SUBDIR_CONTEXT_MARKER);
+  });
+}
+
 export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
   const loadedAgents = new Set<string>();
   const loadedAgentsContent = new Map<string, string>();
@@ -181,6 +192,7 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
       const details = (message as { details?: unknown }).details;
       const persisted = parsePersistedContextDetails(details);
       if (!persisted) continue;
+      if (!contentHasSubdirContext((message as { content?: unknown }).content)) continue;
       for (const file of persisted.files) {
         const absolute = resolvePath(file.path, currentCwd);
         if (path.basename(absolute) !== "AGENTS.md" || absolute === cwdAgentsPath) continue;
@@ -193,7 +205,6 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
   function syncRuntimeFromBranch(branchContext: Map<string, string>): void {
     loadedAgents.clear();
     loadedAgents.add(cwdAgentsPath);
-    loadedAgentsContent.clear();
     for (const [agentsPath, content] of branchContext.entries()) {
       loadedAgents.add(agentsPath);
       loadedAgentsContent.set(agentsPath, content);
@@ -215,30 +226,19 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
     return agentsFiles.reverse();
   }
 
-  function buildInjectedContextMessage(branchContext: Map<string, string>) {
-    if (!branchContext.size) return null;
-    const files = [...branchContext.entries()].sort(([a], [b]) => a.localeCompare(b));
+  function buildToolResultContextBlock(files: PersistedContextFile[]): string | null {
+    if (!files.length) return null;
     const body = files
-      .map(([agentsPath, content]) => {
-        const rel = relativePath(agentsPath);
-        return `<agents_file path="${rel}">\n${content}\n</agents_file>`;
+      .map((file) => {
+        return `<agents_file path="${file.path}">\n${file.content}\n</agents_file>`;
       })
       .join("\n\n");
-    return {
-      role: "custom" as const,
-      customType: SUBDIR_CONTEXT_MESSAGE_TYPE,
-      content: [
-        "<subdirectory_agents_context>",
-        "Automatically loaded AGENTS.md context relevant to recently accessed files.",
-        body,
-        "</subdirectory_agents_context>",
-      ].join("\n"),
-      display: false,
-      details: {
-        files: files.map(([agentsPath]) => relativePath(agentsPath)),
-      },
-      timestamp: Date.now(),
-    };
+    return [
+      "<subdirectory_agents_context>",
+      "Automatically loaded AGENTS.md context relevant to this tool result.",
+      body,
+      "</subdirectory_agents_context>",
+    ].join("\n");
   }
 
   const handleSessionChange = (_event: unknown, ctx: ExtensionContext): void => {
@@ -316,11 +316,12 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
         const content = await fs.promises.readFile(agentsPath, "utf-8");
         const wasLoaded = loadedAgents.has(agentsPath);
         loadedAgents.add(agentsPath);
-        loadedAgentsContent.set(agentsPath, content);
         const branchContent = branchContext.get(agentsPath);
-        if (branchContent !== content) {
+        const knownContent = branchContent ?? loadedAgentsContent.get(agentsPath);
+        if (knownContent !== content) {
           persistedFiles.push({ path: relativePath(agentsPath), content });
         }
+        loadedAgentsContent.set(agentsPath, content);
         if (!wasLoaded) loadedNow.push(relativePath(agentsPath));
       } catch (error) {
         if (ctx.hasUI) ctx.ui.notify(`Failed to load ${agentsPath}: ${String(error)}`, "warning");
@@ -337,25 +338,9 @@ export function registerSubdirContextAutoload(pi: ExtensionAPI): void {
 
     if (!persistedFiles.length) return undefined;
     const details = mergePersistedContextDetails(event.details, { files: persistedFiles });
-    return { details };
-  });
-
-  pi.on("context", async (event, ctx) => {
-    ensureSession(ctx.cwd);
-    const branchContext = collectBranchContext(ctx);
-    const injected = buildInjectedContextMessage(branchContext);
-    if (!injected) return undefined;
-    const baseMessages = Array.isArray(event.messages) ? event.messages : [];
-    const messages = baseMessages.filter((message) => {
-      return !(
-        message &&
-        typeof message === "object" &&
-        "role" in message &&
-        message.role === "custom" &&
-        "customType" in message &&
-        message.customType === SUBDIR_CONTEXT_MESSAGE_TYPE
-      );
-    });
-    return { messages: [...messages, injected] };
+    const contextBlock = buildToolResultContextBlock(persistedFiles);
+    if (!contextBlock) return { details };
+    const content = [...event.content, { type: "text" as const, text: contextBlock }];
+    return { content, details };
   });
 }

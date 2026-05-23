@@ -58,7 +58,7 @@ async function run() {
   const contextHook = pi.handlers.get("context");
   assert.ok(sessionStart, "session_start handler must exist");
   assert.ok(toolResult, "tool_result handler must exist");
-  assert.ok(contextHook, "context handler must exist");
+  assert.equal(contextHook, undefined, "context hook should not inject accumulated AGENTS context");
 
   sessionStart({}, ctx);
 
@@ -72,42 +72,70 @@ async function run() {
 
   const firstRead = await toolResult(readEvent, ctx);
   assert.ok(firstRead, "first read should persist discovered AGENTS context in details");
-  assert.equal(firstRead.content, undefined, "read output should remain unchanged (silent injection)");
   assert.equal(persistedFiles(firstRead.details).length, 2, "should persist two nested AGENTS files");
+  assert.equal(firstRead.content.length, 2, "read output should get one appended AGENTS context block");
+  assert.match(firstRead.content[1].text, /a\/AGENTS\.md/);
+  assert.match(firstRead.content[1].text, /a\/b\/AGENTS\.md/);
 
   branchEntries.push({
     type: "message",
-    message: { role: "toolResult", details: firstRead.details },
+    message: { role: "toolResult", content: firstRead.content, details: firstRead.details },
   });
-
-  const firstContext = await contextHook({ messages: [] }, ctx);
-  assert.ok(firstContext, "context hook should inject hidden AGENTS context message");
-  assert.equal(firstContext.messages.length, 1);
-  assert.equal(firstContext.messages[0].role, "custom");
-  assert.equal(firstContext.messages[0].display, false);
-  assert.match(firstContext.messages[0].content, /a\/AGENTS\.md/);
-  assert.match(firstContext.messages[0].content, /a\/b\/AGENTS\.md/);
 
   branchEntries.length = 0;
-  const emptyBranchContext = await contextHook({ messages: [] }, ctx);
-  assert.equal(
-    emptyBranchContext,
-    undefined,
-    "context hook should not inject stale AGENTS context when active branch has none",
-  );
 
   branchEntries.push({
     type: "message",
-    message: { role: "toolResult", details: firstRead.details },
+    message: { role: "toolResult", content: firstRead.content, details: firstRead.details },
   });
   sessionStart({}, ctx);
-  const resumedContext = await contextHook({ messages: [] }, ctx);
-  assert.ok(resumedContext, "context should be available immediately after resume/session start");
-  assert.match(resumedContext.messages[0].content, /a\/AGENTS\.md/);
-  assert.match(resumedContext.messages[0].content, /a\/b\/AGENTS\.md/);
 
   const secondRead = await toolResult(readEvent, ctx);
   assert.equal(secondRead, undefined, "second read should not emit duplicate persisted updates");
+
+  sessionStart({}, ctx);
+  branchEntries.length = 0;
+  branchEntries.push({
+    type: "message",
+    message: {
+      role: "toolResult",
+      content: [{ type: "text", text: "legacy tool result without appended context" }],
+      details: firstRead.details,
+    },
+  });
+
+  const migratedLegacyRead = await toolResult(readEvent, ctx);
+  assert.ok(migratedLegacyRead, "legacy persisted details should not suppress appended AGENTS context");
+  assert.equal(persistedFiles(migratedLegacyRead.details).length, 2);
+  assert.match(migratedLegacyRead.content.at(-1).text, /<subdirectory_agents_context>/);
+
+  branchEntries.length = 0;
+  sessionStart({}, ctx);
+  await fs.mkdir(path.join(cwd, "a", "parallel"), { recursive: true });
+  await fs.writeFile(path.join(cwd, "a", "parallel", "AGENTS.md"), "PARALLEL");
+  await fs.writeFile(path.join(cwd, "a", "parallel", "file.ts"), "export const p = 1;\n");
+  const parallelReadEvent = {
+    toolName: "read",
+    isError: false,
+    input: { path: path.join(cwd, "a", "parallel", "file.ts") },
+    content: [{ type: "text", text: "PARALLEL FILE" }],
+    details: {},
+  };
+  const firstParallelRead = await toolResult(parallelReadEvent, ctx);
+  const secondParallelRead = await toolResult(parallelReadEvent, ctx);
+  assert.ok(firstParallelRead, "first parallel-style read should append AGENTS context");
+  assert.equal(
+    secondParallelRead,
+    undefined,
+    "in-memory dedupe should suppress duplicate AGENTS context before branch records sibling result",
+  );
+
+  branchEntries.length = 0;
+  branchEntries.push({
+    type: "message",
+    message: { role: "toolResult", content: firstRead.content, details: firstRead.details },
+  });
+  sessionStart({}, ctx);
 
   for (let index = 0; index < 7; index += 1) {
     await toolResult(
@@ -249,14 +277,6 @@ async function run() {
     type: "message",
     message: { role: "toolResult", details: freshNestedViaBash.details },
   });
-
-  const refreshedContext = await contextHook({ messages: [] }, ctx);
-  assert.ok(refreshedContext, "context hook should include newly discovered nested AGENTS");
-  assert.ok(
-    refreshedContext.messages.some((message) =>
-      typeof message.content === "string" ? message.content.includes("a/b/c/AGENTS.md") : false,
-    ),
-  );
 
   await fs.rm(root, { recursive: true, force: true });
   console.log("subdir-context test passed");

@@ -4,6 +4,7 @@
 
 - Appended nested `AGENTS.md` context to the triggering tool result instead of reinjecting accumulated hidden context on every model request.
 - Preserved existing load notifications while reducing repeated prompt/context bloat from nested `AGENTS.md` files.
+- Updated the bundled `skill-creator` guidance so trigger-selection sections belong in frontmatter descriptions, not loaded skill bodies.
 - Added this retrospective changelog and included it in the npm package.
 
 ## 0.2.8

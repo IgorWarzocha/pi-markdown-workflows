@@ -6,37 +6,29 @@ description: Designs, writes, refactors, and packages agent skills for this work
 # Skill Creator
 
 ## Purpose
+
 Use this skill to build or improve reusable skills for this workspace without turning them into bloated promptware. A good skill should trigger cleanly, stay operational, keep its frontmatter lean, and reflect the house style: act first when the path is clear, keep warmth where it helps, and troubleshoot only when reality actually breaks.
 
-## When to use
-- The user wants a new skill for a recurring workflow.
-- An existing `SKILL.md` is too vague, too robotic, too bloated, or triggers badly.
-- A workflow needs better boundaries, validation, examples, or output contracts.
-- A skill should be split into `SKILL.md` plus `references/` and possibly `scripts/`.
-- A copied external skill needs to be adapted to this house instead of imported raw.
-- A skill is too eager to troubleshoot, too eager to preflight, or too willing to become a little church.
-
-## Do not use when
-- The workflow is still unclear, one-off, or not actually repeatable.
-- The task is really just a direct doc edit with no reusable workflow behind it.
-- The target is a strict deployment/runbook doc where warmth or abstraction would make it worse.
-- The user only wants a tiny local prompt tweak rather than a portable skill.
-
 ## Inputs expected
+
 ### Required
+
 - The workflow or problem the skill should handle.
 - The target skill path or enough context to infer it.
 
 ### Optional
+
 - Existing `SKILL.md` to improve.
 - Reference docs, example prompts, or upstream skills to adapt.
 - Whether the skill should stay minimal or include `references/` / `scripts/`.
 
 ## Prerequisites
+
 - Read `references/skills-reference-guide-for-agents.md` before authoring or heavily restructuring a skill.
 - Prefer exact paths and existing workspace conventions over invented structure.
 
 ## Workflow
+
 1. **Confirm the task deserves a skill.**
    - A skill is warranted when the workflow recurs, has recognizable steps, and output quality improves when structure is reused.
    - If the workflow is still mushy, tighten the use cases before writing anything.
@@ -55,10 +47,13 @@ Use this skill to build or improve reusable skills for this workspace without tu
 4. **Draft the frontmatter last, but keep it lean.**
    - Default to only `name` and `description` unless extra fields are truly justified.
    - Keep the description trigger-rich and compact.
+   - Put all trigger guidance in the frontmatter `description`: what the skill does, when to use it, and when not to use it if overlap is likely.
+   - Do not add `When to use`, `Do not use when`, `Activation`, `Triggers`, or similar trigger-boundary sections to the skill body. By the time the body is loaded, the agent should already know why this skill applies; if not, the `description` is wrong and must be improved.
    - Avoid architecture-centred or product-marketing wording.
 
 5. **Write the operational body.**
    - Include the core job, boundaries, expected inputs, workflow, validation, error handling, output contract, and a few realistic examples.
+   - Keep body boundaries operational: prerequisites, safety limits, handoff rules, and workflow constraints are fine; trigger-selection guidance belongs in frontmatter only.
    - Keep the step order explicit.
    - Put critical rules near the top.
    - Prefer exact file paths when pointing to supporting material.
@@ -85,15 +80,17 @@ Use this skill to build or improve reusable skills for this workspace without tu
    - It does not turn every task into diagnostics-first ritual.
    - It does not become doctrine when a bounded tool would do.
 
-8. **Ship the skill cleanly.**
+9. **Ship the skill cleanly.**
    - Create or update the files directly when the target path and intent are obvious.
    - Summarize what was created or changed and why.
    - If useful, call out the trigger sentence so it is easy to sanity-check.
 
 ## Validation
+
 - The skill solves a recurring workflow, not a one-off.
 - The description states what it does, when to use it, and when not to use it if overlap is likely.
 - Frontmatter is not bloated.
+- The body does not contain `When to use`, `Do not use when`, or equivalent trigger-selection sections.
 - `SKILL.md` stays operational; heavy detail is moved out.
 - The workflow does the normal thing first and troubleshoots only on pain.
 - If trigger quality was the complaint, the description was adjusted directly instead of disappearing into eval theater.
@@ -101,23 +98,31 @@ Use this skill to build or improve reusable skills for this workspace without tu
 - File paths in references are exact.
 
 ## Error handling
+
 ### Error: workflow is too vague
+
 Action: reduce it to 2-3 concrete use cases before drafting the skill.
 
 ### Error: over-triggering or under-triggering risk
+
 Action: tighten or broaden the description with explicit examples and exclusions.
 
 ### Error: main file is getting bloated
+
 Action: move factual detail or edge cases into `references/`.
 
 ### Error: deterministic check is too fuzzy in prose
+
 Action: move that check into `scripts/` only if the repeatable logic really benefits from code.
 
 ### Error: copied external skill is preachy or tool-religious
+
 Action: keep the useful workflow, delete the church.
 
 ## Output contract
+
 A completed skill-creation pass should leave:
+
 - a valid `SKILL.md` in the right folder
 - any needed `references/` or `scripts/` files
 - a clear trigger description
@@ -125,28 +130,35 @@ A completed skill-creation pass should leave:
 - a concise summary of what changed and why
 
 ## Examples
+
 ### Example 1
+
 User says: "Make me a skill for turning recurring repo spelunking into a reusable workflow."
 
 Expected behaviour:
+
 1. Confirm the workflow is recurring.
 2. Read the skills guide.
 3. Draft a minimal skill with a sharp trigger boundary.
 4. Add references only if the main file starts getting fat.
 
 ### Example 2
+
 User says: "This skill is too robotic and keeps running diagnostics first. Fix it."
 
 Expected behaviour:
+
 1. Read the existing skill.
 2. Identify the diagnostics-first smell.
 3. Split troubleshooting into a separate reference if needed.
 4. Rework the default workflow so it tries the normal path first.
 
 ### Example 3
+
 User says: "Port this upstream skill, but make it fit our house."
 
 Expected behaviour:
+
 1. Extract the real workflow from the upstream material.
 2. Keep the useful patterns.
 3. Remove doctrinal, bloated, or tool-religious framing.

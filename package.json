@@ -40,7 +40,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "node tests/subdir-context.test.mjs && node tests/skill-discovery.test.mjs",
+    "test": "node tests/subdir-context.test.mjs && node tests/skill-discovery.test.mjs && node tests/claims-regression.test.mjs",
     "check": "tsc --noEmit",
     "clean": "rm -rf dist",
     "lint": "oxfmt --check index.ts src/**/*.ts",

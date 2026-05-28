@@ -1,0 +1,118 @@
+# pi-markdown-workflows
+
+> Why download crappy skills when you can make god tier skills yourself?
+
+Pi extension for building, refining, and using **workflows** (repo SOPs) and **skills** (global capabilities) from one unified GUI.
+
+<img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/a9124b44-eb29-4159-83fa-27df40c8825a" />
+
+## Key features
+
+### Unified GUI for workflows and skills
+A single interface powers both `/workflows` and `/skills`.
+
+- Tab between both views with `Tab` / `Shift+Tab`
+- Search, preview details, and run actions from the same UX model
+- Create skills using the bundled `skill-creator` skill
+- Keep command surface clean while still supporting advanced actions
+
+### UI primitives SDK (npm)
+This extension now consumes UI primitives from npm via:
+
+- `@howaboua/pi-howaboua-extensions-primitives-sdk`
+
+The SDK is no longer vendored in this repository under `sdk/`.
+
+### Three user commands
+This extension exposes three user-facing commands:
+
+- `/workflows` — workflow list and actions
+- `/skills` — skill list and actions
+- `/learn [optional guidance]` — capture concise session findings into the most appropriate `AGENTS.md`
+
+### Skill and workflow creation + refinement
+Creation and refinement are first-class flows in the UI.
+
+- Workflows: create, use, refine, append-to-agents, promote-to-skill, delete
+- Skills: create, use, refine, delete
+- Refinement prompts enforce strong structure, RFC language semantics, and actionable quality criteria
+
+### Agent tool for automatic workflow documentation
+Agents can document reusable process knowledge while they work via:
+
+- `workflows_create`
+
+The tool writes workflow files to:
+
+- `./.pi/workflows/<slug>/SKILL.md`
+
+This makes workflow capture deterministic and reusable across future sessions.
+
+### Nested AGENTS.md context autoload
+The extension auto-loads nested `AGENTS.md` files into the tool result that discovered them when relevant files/paths are accessed.
+
+- triggers on `read`
+- also triggers for discovery/listing/read-ish shell tool commands (`bash`, `exec`, `exec_command`, `shell`) using `command` or `cmd` input (`ls`, `find`, `rg`, `grep`, `fd`, `tree`, `cat`, `sed`, `head`, `tail`, `nl`, `wc`, `stat`, `file`, `du`, `git ls-files`, `git grep`)
+- loads full nested chain (excluding cwd root `AGENTS.md` reinjection)
+- appends context only to the triggering tool result when new/changed nested context is discovered
+
+## Workflows vs skills
+
+- **Workflows**: repository SOPs that evolve with project conventions
+- **Skills**: broader reusable capabilities, usually global
+
+Recommended global skills location:
+
+- `~/.pi/agent/skills/`
+
+## Install
+
+From npm:
+
+```bash
+pi install npm:@howaboua/pi-markdown-workflows
+```
+
+From Git:
+
+```bash
+pi install git+https://github.com/IgorWarzocha/pi-markdown-workflows.git
+```
+
+For local development:
+
+```bash
+pi -e /absolute/path/to/pi-markdown-workflows/index.ts
+```
+
+## Publishing
+
+Release history is tracked in [CHANGELOG.md](./CHANGELOG.md).
+
+```bash
+npm run publish:dry-run
+```
+
+Dev tag publish:
+
+```bash
+npm run publish:dev
+```
+
+Bump prerelease + publish dev tag:
+
+```bash
+npm run release:dev
+```
+
+## Recommended setting to reduce clutter
+
+If `/skill:<name>` commands clutter your command palette, disable skill command registration and use `/skills` instead:
+
+`/settings` => `skill commands: false`
+
+## Repository
+
+- https://github.com/IgorWarzocha/pi-markdown-workflows
+
+Markdown Is All You Need™
